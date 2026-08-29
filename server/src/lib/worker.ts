@@ -2,6 +2,7 @@ import type { AgentContext } from './agent-run.js';
 import { AgentRun } from './agent-run.js';
 import { runDemoStream } from '../agents/demo-stream.js';
 import { runQuoteExtraction } from '../agents/extract-quote.js';
+import { runChangeOrderArchaeology } from '../agents/co-archaeologist.js';
 import { runDivisionConsult } from '../agents/division-consult.js';
 import { runScopeDrafter } from '../agents/draft-scope.js';
 import { runNormalisation } from '../agents/normalise-quote.js';
@@ -20,6 +21,7 @@ const AGENTS: Record<string, Agent> = {
   normalise_quote: (ctx, payload) => runNormalisation(ctx, payload),
   division_consult: (ctx, payload) => runDivisionConsult(ctx, payload),
   draft_scope: (ctx, payload) => runScopeDrafter(ctx, payload),
+  co_archaeology: (ctx, payload) => runChangeOrderArchaeology(ctx, payload),
 };
 
 /**

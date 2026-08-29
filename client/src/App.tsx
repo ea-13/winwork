@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useSession } from './lib/session';
+import { ArchaeologyPage } from './pages/Archaeology';
+import { AskPage } from './pages/Ask';
 import { Login } from './pages/Login';
 import { PackagePage } from './pages/Package';
 import { ProjectPage } from './pages/Project';
@@ -65,6 +67,22 @@ export default function App() {
         element={
           <Protected>
             <ReviewQueuePage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/ask"
+        element={
+          <Protected>
+            <AskPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/archaeology"
+        element={
+          <Protected>
+            <ArchaeologyPage />
           </Protected>
         }
       />

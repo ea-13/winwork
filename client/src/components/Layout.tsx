@@ -16,8 +16,14 @@ export function Layout({ children, breadcrumb }: Props) {
               WinProjects
             </Link>
             <nav className="flex gap-3 text-xs text-slate-500">
+              <Link to="/ask" className="hover:text-slate-900">
+                Ask an expert
+              </Link>
               <Link to="/subcontractors" className="hover:text-slate-900">
                 Subs
+              </Link>
+              <Link to="/archaeology" className="hover:text-slate-900">
+                Archaeology
               </Link>
               <Link to="/review" className="hover:text-slate-900">
                 Review queue

@@ -26,57 +26,11 @@ function getClient(): Anthropic {
   return client;
 }
 
-export type CompletionResult = {
-  text: string;
-  inputTokens: number;
-  outputTokens: number;
-  /** USD. Recorded onto agent_run.token_cost so a run's cost is auditable. */
-  costUsd: number;
-};
-
-export type CompleteOptions = {
-  system?: string;
-  messages: Anthropic.MessageParam[];
-  maxTokens?: number;
-  /** low | medium | high | xhigh | max. Higher costs more and thinks longer. */
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-};
-
-/**
- * One model call, streamed.
- *
- * Streaming rather than a plain create() because extraction responses are long
- * — a 40-page quote produces a lot of line items — and a non-streaming request
- * with a large max_tokens runs into the SDK's HTTP timeout.
- */
-export async function complete(options: CompleteOptions): Promise<CompletionResult> {
-  const stream = getClient().messages.stream({
-    model: MODEL,
-    max_tokens: options.maxTokens ?? 16000,
-    thinking: { type: 'adaptive' },
-    output_config: { effort: options.effort ?? 'high' },
-    ...(options.system === undefined ? {} : { system: options.system }),
-    messages: options.messages,
-  });
-
-  const message = await stream.finalMessage();
-
-  const text = message.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
-
-  const inputTokens = message.usage.input_tokens;
-  const outputTokens = message.usage.output_tokens;
-
-  return {
-    text,
-    inputTokens,
-    outputTokens,
-    costUsd:
-      (inputTokens / 1_000_000) * PRICE_PER_MTOK.input +
-      (outputTokens / 1_000_000) * PRICE_PER_MTOK.output,
-  };
+function costOf(inputTokens: number, outputTokens: number): number {
+  return (
+    (inputTokens / 1_000_000) * PRICE_PER_MTOK.input +
+    (outputTokens / 1_000_000) * PRICE_PER_MTOK.output
+  );
 }
 
 export type StructuredResult<T> = {
@@ -137,8 +91,189 @@ export async function extractStructured<T extends z.ZodType>(options: {
     value: response.parsed_output as z.infer<T>,
     inputTokens,
     outputTokens,
-    costUsd:
-      (inputTokens / 1_000_000) * PRICE_PER_MTOK.input +
-      (outputTokens / 1_000_000) * PRICE_PER_MTOK.output,
+    costUsd: costOf(inputTokens, outputTokens),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Division expert consultation
+// -----------------------------------------------------------------------------
+
+export type ExpertPattern = {
+  id: string;
+  division: string;
+  text: string;
+  section: string | null;
+  frequentChangeOrder: boolean;
+};
+
+export type ExpertScopeItem = {
+  scopeId: string;
+  section: string | null;
+  title: string;
+  description: string | null;
+  quantity: number | null;
+  unit: string | null;
+  locked: boolean;
+};
+
+export type ExpertAnswer = {
+  text: string;
+  citations: { kind: string; ref: string }[];
+  costUsd: number;
+};
+
+const EXPERT_SYSTEM = `You are a construction division expert advising a general
+contractor's preconstruction team. You know your divisions' codes, standard
+details, the trades that habitually split scope with each other, and the gaps
+that recur job after job.
+
+You are given: gap patterns for the divisions in play, the project's scope
+baseline where one exists, and any documents the estimator has pointed you at.
+
+HOW TO ANSWER:
+
+- Answer the question that was asked, in the estimator's language. They are not
+  a novice; do not explain what a submittal is.
+- CITE. Every factual claim rests on something you were given: a gap pattern id
+  in square brackets, a scope item's id, or a page in an attached document. Say
+  which. If you are drawing on general construction knowledge rather than the
+  material provided, say so plainly, so the estimator knows the difference.
+- If the material does not answer the question, say so and say what document
+  would. Do not fill the gap with a plausible answer. An expert who guesses is
+  worse than no expert, because the guess gets bid.
+- NEVER give a dollar figure or a unit cost. Costing has its own rules and its
+  own step. If asked, say what the number depends on and where it would come
+  from.
+- When you spot something adjacent the estimator did not ask about but would
+  want to know — a scope item nothing covers, a detail two trades both assume
+  the other carries — add it briefly at the end, marked as such.
+
+Be direct and brief. An estimator reading this is mid-task.`;
+
+const NEWLINE = '\n';
+
+/**
+ * A question to a division expert, grounded in retrieved knowledge and any
+ * documents the estimator attached.
+ *
+ * Streamed, because a question asked against a 40-page spec takes long enough
+ * that a non-streaming request risks the SDK's HTTP timeout.
+ */
+export async function askExpert(options: {
+  question: string;
+  divisions: string[];
+  patterns: ExpertPattern[];
+  scope: ExpertScopeItem[];
+  attachments: { filename: string; bytes: Buffer }[];
+  history: { role: 'user' | 'assistant'; content: string }[];
+}): Promise<ExpertAnswer> {
+  const content: Anthropic.ContentBlockParam[] = [];
+
+  for (const attachment of options.attachments) {
+    content.push({
+      type: 'document',
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: attachment.bytes.toString('base64'),
+      },
+      title: attachment.filename,
+    });
+  }
+
+  const patternLines =
+    options.patterns.length === 0
+      ? '  (none loaded for these divisions)'
+      : options.patterns
+          .map(
+            (pattern) =>
+              `  [${pattern.id.slice(0, 8)}] div ${pattern.division}` +
+              (pattern.section ? ` sec ${pattern.section}` : '') +
+              (pattern.frequentChangeOrder ? ' (frequent change order)' : '') +
+              `: ${pattern.text}`,
+          )
+          .join(NEWLINE);
+
+  const scopeLines =
+    options.scope.length === 0
+      ? '  (no scope items on this project yet)'
+      : options.scope
+          .map(
+            (item) =>
+              `  ${item.scopeId}` +
+              (item.section ? ` sec ${item.section}` : '') +
+              (item.locked ? ' [locked]' : ' [open]') +
+              `: ${item.title}` +
+              (item.quantity ? ` — ${item.quantity} ${item.unit ?? ''}` : ''),
+          )
+          .join(NEWLINE);
+
+  const knowledge = [
+    options.divisions.length > 0
+      ? `DIVISIONS IN PLAY: ${options.divisions.join(', ')}`
+      : 'DIVISIONS IN PLAY: all',
+    '',
+    'KNOWN GAP PATTERNS (cite by the id in square brackets):',
+    patternLines,
+    '',
+    'SCOPE BASELINE (cite by scope id):',
+    scopeLines,
+    '',
+    options.attachments.length > 0
+      ? `ATTACHED DOCUMENTS: ${options.attachments.map((a) => a.filename).join(', ')}`
+      : 'ATTACHED DOCUMENTS: none',
+    '',
+    '---',
+    '',
+    `QUESTION: ${options.question}`,
+  ].join(NEWLINE);
+
+  content.push({ type: 'text', text: knowledge });
+
+  const messages: Anthropic.MessageParam[] = [
+    ...options.history.map((entry) => ({ role: entry.role, content: entry.content })),
+    { role: 'user' as const, content },
+  ];
+
+  const stream = getClient().messages.stream({
+    model: MODEL,
+    max_tokens: 8000,
+    system: EXPERT_SYSTEM,
+    thinking: { type: 'adaptive' },
+    messages,
+  });
+
+  const message = await stream.finalMessage();
+
+  const text = message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map((block) => block.text)
+    .join('');
+
+  // Citations are read out of the answer rather than demanded as a schema:
+  // forcing structure onto a conversational reply makes it read like a form,
+  // and the point of a chat is that it does not.
+  const citations: { kind: string; ref: string }[] = [];
+
+  for (const match of text.matchAll(/\[([0-9a-f]{8})\]/g)) {
+    citations.push({ kind: 'gap_pattern', ref: match[1] ?? '' });
+  }
+  for (const match of text.matchAll(/\b([A-Z0-9]+-\d{4}-\d{3}-\d{2}-\d{3})\b/g)) {
+    citations.push({ kind: 'scope_item', ref: match[1] ?? '' });
+  }
+  for (const match of text.matchAll(/\bp(?:age)?\.?\s?(\d{1,4})\b/gi)) {
+    citations.push({ kind: 'page', ref: match[1] ?? '' });
+  }
+
+  const unique = citations.filter(
+    (citation, index, all) =>
+      all.findIndex((other) => other.kind === citation.kind && other.ref === citation.ref) === index,
+  );
+
+  return {
+    text,
+    citations: unique,
+    costUsd: costOf(message.usage.input_tokens, message.usage.output_tokens),
   };
 }
