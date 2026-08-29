@@ -1,0 +1,28 @@
+#!/bin/sh
+# Blocks commits that carry credentials into tracked files.
+#
+# Exists because real keys have twice been pasted into .env.example, which git
+# tracks. Scans staged content, not the working tree, so it sees exactly what
+# the commit would contain.
+#
+# Bypass with `git commit --no-verify` only when certain a match is spurious.
+
+SELF='.githooks/pre-commit'
+PATTERN='sk-ant-[A-Za-z0-9_-]{20,}|sb_secret_[A-Za-z0-9_-]{10,}|eyJhbGciOi|postgresql://[^:@/]+:[^@]+@'
+
+found=''
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+  [ "$file" = "$SELF" ] && continue
+  if git show ":$file" 2>/dev/null | grep -Eq "$PATTERN"; then
+    found="$found $file"
+  fi
+done
+
+if [ -n "$found" ]; then
+  echo "COMMIT BLOCKED — credentials found in staged files:"
+  for file in $found; do echo "    $file"; done
+  echo
+  echo "  Real secrets belong in .env, which is gitignored."
+  echo "  Move them there, leave the tracked file's value empty, and re-commit."
+  exit 1
+fi
