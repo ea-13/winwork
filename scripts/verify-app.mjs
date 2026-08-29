@@ -125,7 +125,7 @@ const rejectedResponse = await authed(`/api/packages/${packageId}/documents`, {
   method: 'POST',
   body: rejected,
 });
-check(rejectedResponse.status === 400, 'a disallowed file type is rejected', `HTTP ${rejectedResponse.status}`);
+check(rejectedResponse.status === 415, 'a disallowed file type is rejected', `HTTP ${rejectedResponse.status} Unsupported Media Type`);
 
 const form = new FormData();
 form.append('files', new Blob([pdf], { type: 'application/pdf' }), 'verify probe.pdf');

@@ -339,6 +339,71 @@ const PACKAGE_BIDDERS = [
 
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Division Experts
+//
+// Shared reference data, not tenant data. Every major CSI division gets a row so
+// the mechanism is wired end to end; all are SEED_STUB, because a stub is an
+// honest label and a placeholder presented as knowledge is not.
+//
+// The gap patterns below are common industry checks, not Elie's playbooks. They
+// exist so the detector has something to match against. Replacing them with the
+// real DIV-07/08/09/11/22/23/26 content from the vault is what turns these from
+// stubs into experts.
+// -----------------------------------------------------------------------------
+
+const DIVISION_EXPERTS: { code: string; title: string; patterns: string[] }[] = [
+  { code: '02', title: 'Existing Conditions', patterns: ['Hazmat survey and abatement scope split between owner and GC'] },
+  { code: '03', title: 'Concrete', patterns: ['Slab moisture vapour testing excluded', 'Concrete pumping and placement access not priced'] },
+  { code: '04', title: 'Masonry', patterns: ['Masonry reinforcing and grout excluded from unit pricing'] },
+  { code: '05', title: 'Metals', patterns: ['Embed plates and connection design by others', 'Miscellaneous metals not clearly assigned'] },
+  { code: '06', title: 'Wood, Plastics & Composites', patterns: ['Blocking and backing for wall-mounted items excluded'] },
+  { code: '07', title: 'Thermal & Moisture Protection', patterns: ['Firestopping at penetrations excluded by every trade', 'Through-wall flashing at transitions unassigned', 'Roof warranty term shorter than specified'] },
+  { code: '08', title: 'Openings', patterns: ['Door hardware supplied but not installed', 'Rated glazing assemblies priced as standard glazing'] },
+  { code: '09', title: 'Finishes', patterns: ['Missing slab moisture mitigation line under resilient or epoxy floors', 'Level 4 versus Level 5 gypsum finish assumed downward', 'Ceiling grid seismic bracing excluded'] },
+  { code: '10', title: 'Specialties', patterns: ['Toilet accessories supplied by owner but installed by whom'] },
+  { code: '11', title: 'Equipment', patterns: ['Equipment final connections excluded by both trade and supplier', 'Owner-furnished equipment receiving and setting unassigned'] },
+  { code: '12', title: 'Furnishings', patterns: ['Window treatment blocking and power not coordinated'] },
+  { code: '14', title: 'Conveying Equipment', patterns: ['Elevator shaft venting and hoist beam excluded'] },
+  { code: '21', title: 'Fire Suppression', patterns: ['Sprinkler head relocation for ceiling changes excluded', 'Fire pump testing and certification unassigned'] },
+  { code: '22', title: 'Plumbing', patterns: ['Trenching, backfill and compaction excluded from plumbing', 'Point-of-use water heaters excluded', 'Fixture carriers and rough-in only, trim by others'] },
+  { code: '23', title: 'HVAC', patterns: ['Test and balance excluded', 'Controls and BAS integration split between trades', 'Roof curbs and structural support excluded'] },
+  { code: '26', title: 'Electrical', patterns: ['Line-voltage connections to owner equipment excluded', 'Fire alarm programming and certification excluded', 'Temporary power not carried by anyone'] },
+  { code: '27', title: 'Communications', patterns: ['Low-voltage pathways excluded from both electrical and IT'] },
+  { code: '28', title: 'Electronic Safety & Security', patterns: ['Access control door hardware coordination unassigned'] },
+  { code: '31', title: 'Earthwork', patterns: ['Import and export of soil priced against an unstated assumption'] },
+  { code: '32', title: 'Exterior Improvements', patterns: ['Irrigation sleeving under paving excluded'] },
+  { code: '33', title: 'Utilities', patterns: ['Utility company fees and connection charges excluded'] },
+];
+
+async function seedDivisionExperts(): Promise<{ experts: number; patterns: number }> {
+  const expertRows = DIVISION_EXPERTS.map((division) => ({
+    id: stableId(`division:${division.code}`),
+    csi_division: division.code,
+    title: division.title,
+    status: 'SEED_STUB' as const,
+  }));
+
+  const experts = await supabaseAdmin.from('division_expert').upsert(expertRows);
+  fail('division_expert', experts.error);
+
+  const patternRows = DIVISION_EXPERTS.flatMap((division) =>
+    division.patterns.map((text, index) => ({
+      id: stableId(`pattern:${division.code}:${index}`),
+      division_expert_id: stableId(`division:${division.code}`),
+      pattern_text: text,
+      typical_csi_section: division.code,
+      is_frequent_change_order: true,
+      detection_hint: 'SEED_STUB — replace with the division playbook section 4',
+    })),
+  );
+
+  const patterns = await supabaseAdmin.from('gap_pattern').upsert(patternRows);
+  fail('gap_pattern', patterns.error);
+
+  return { experts: expertRows.length, patterns: patternRows.length };
+}
+
 function fail(step: string, error: { message: string } | null): void {
   if (error) {
     console.error(`  ${step} failed: ${error.message}`);
@@ -507,10 +572,14 @@ async function main(): Promise<void> {
     ),
   );
 
+  const knowledge = await seedDivisionExperts();
+
   console.log('  tenant                Demo Construction Co');
   for (const [table, count] of counts) {
     console.log(`  ${table.padEnd(20)}  ${count}`);
   }
+  console.log(`  division_expert       ${knowledge.experts}  (global, all SEED_STUB)`);
+  console.log(`  gap_pattern           ${knowledge.patterns}  (placeholders, replace from the vault playbooks)`);
   console.log('\n  planted gaps: 07-14 firestopping (UNCOVERED, no bidder prices it)');
   console.log('                09-72 FRP wall protection (PARTIAL)');
   console.log('\nseed complete — safe to re-run');

@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useSession } from './lib/session';
 import { Login } from './pages/Login';
 import { PackagePage } from './pages/Package';
-import { useSession } from './lib/session';
+import { ProjectPage } from './pages/Project';
+import { ProjectsPage } from './pages/Projects';
 
 function Protected({ children }: { children: ReactNode }) {
   const { session, loading } = useSession();
@@ -26,6 +28,22 @@ export default function App() {
       />
       <Route
         path="/"
+        element={
+          <Protected>
+            <ProjectsPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/projects/:projectId"
+        element={
+          <Protected>
+            <ProjectPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/packages/:packageId"
         element={
           <Protected>
             <PackagePage />

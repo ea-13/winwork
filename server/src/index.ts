@@ -9,6 +9,7 @@ import { agentRunsRouter } from './routes/agent-runs.js';
 import { documentsRouter } from './routes/documents.js';
 import { gatesRouter } from './routes/gates.js';
 import { healthRouter } from './routes/health.js';
+import { projectsRouter } from './routes/projects.js';
 import { sessionRouter } from './routes/session.js';
 
 const app = express();
@@ -23,6 +24,7 @@ app.use('/api', healthRouter);
 // than per-route means a new route is protected by default — forgetting to add
 // auth is the mistake that matters, so the layout makes it the harder one.
 app.use('/api', requireAuth, sessionRouter);
+app.use('/api', requireAuth, projectsRouter);
 app.use('/api', requireAuth, documentsRouter);
 app.use('/api', requireAuth, agentRunsRouter);
 app.use('/api/gates', requireAuth, gatesRouter);

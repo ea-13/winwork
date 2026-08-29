@@ -89,5 +89,40 @@ for (const file of files) {
   }
 }
 
+// Re-apply "every foreign key and tenant_id is indexed" after every run. A
+// migration that adds a column cannot know to do this, and forgetting is
+// invisible until a query gets slow -- so it is enforced here rather than
+// remembered.
+await client.query(`
+  do $$
+  declare r record;
+  begin
+    for r in
+      select con.conname, cl.relname as tbl,
+             string_agg(quote_ident(att.attname), ', ' order by k.ord) as cols
+      from pg_constraint con
+      join pg_class cl on cl.oid = con.conrelid
+      join pg_namespace n on n.oid = cl.relnamespace
+      cross join lateral unnest(con.conkey) with ordinality as k(attnum, ord)
+      join pg_attribute att on att.attrelid = con.conrelid and att.attnum = k.attnum
+      where con.contype = 'f' and n.nspname = 'public'
+      group by con.conname, cl.relname
+    loop
+      execute format('create index if not exists %I on public.%I (%s)',
+                     left('idx_' || r.conname, 63), r.tbl, r.cols);
+    end loop;
+    for r in
+      select c.relname as tbl from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_attribute a on a.attrelid = c.oid
+      where n.nspname = 'public' and c.relkind = 'r'
+        and a.attname = 'tenant_id' and a.attnum > 0 and not a.attisdropped
+    loop
+      execute format('create index if not exists %I on public.%I (tenant_id)',
+                     left('idx_' || r.tbl || '_tenant_id', 63), r.tbl);
+    end loop;
+  end;
+  $$`);
+
 console.log(count ? `\napplied ${count} migration(s)` : '\nnothing to apply');
 await client.end();
