@@ -67,6 +67,58 @@ source (R6), and an uncalibrated range stays flagged (R5). `division_expert.stat
 
 ---
 
+## Training corpus and evaluation data lake
+
+**This is a product capability, not just cleanup.** Every human edit over an agent's proposal is a
+labelled correction, and this is the only place that data will ever exist.
+
+What is already capturing it:
+
+- `draft` — what an agent proposed, with its model, prompt version, source document and page
+  location. Immutable.
+- `audit_event` — what a human then chose, with before and after values, actor and timestamp.
+  Append-only. Written by `PATCH /api/records/:table/:id` for every edited field.
+- `approval` — which gate crossings a human accepted, and the stated reason.
+
+Join those three and you have supervised training pairs: *(document, agent proposal, human
+correction, rationale)*.
+
+### To build
+
+| # | Item | Notes |
+|---|---|---|
+| 19 | **Dataset export** | An endpoint that emits draft/edit/approval triples as JSONL, scoped to a tenant, with documents referenced by storage path. This is the corpus. |
+| 20 | **Held-out evaluation set** | Freeze a set of quotes with human-verified extractions. Every prompt change runs against it before shipping. Without this, "the agent got better" is an opinion. |
+| 21 | **Regression scoring** | Per-agent metrics that matter: exclusions found versus exclusions present (recall is what counts here — a missed exclusion is the failure that costs money), false-positive rate, add-back basis distribution. |
+| 22 | **Edit-reason capture** | An optional short "why" on a correction. A correction with a reason is worth several without one. |
+| 23 | **PII boundary before any training use** | Sub contacts, vendor emails and phone numbers are in `subcontractor` and `raw_row`. Strip or tokenise before any corpus leaves the tenant. |
+
+**Design constraint:** the corpus is a by-product of normal use, never a separate data-entry chore.
+If capturing it changes how an estimator works, it will not get captured.
+
+---
+
+## Spreadsheet editing — decision
+
+Elie asked whether to embed Excel or Google Sheets. **Recommendation: no embed, a grid inside the
+app plus xlsx round-trip.**
+
+Embedding Sheets moves the data outside Supabase, which means RLS no longer applies, `audit_event`
+no longer records who changed what, and the append-only ledger — the product's core claim to a GC —
+stops being true for anything edited that way. The demo argument "nothing reaches your bid without
+your estimator approving it, and we can prove who did" cannot survive data living in a Google
+document.
+
+What gets the same ergonomics without that cost:
+
+| # | Item | Notes |
+|---|---|---|
+| 24 | **In-app editable grid** | Keyboard navigation, tab-to-next-cell, paste a block from Excel. Every cell commit goes through `PATCH /api/records/...`, so it is audited. |
+| 25 | **xlsx export and re-import** | Work offline in Excel, upload the edited file, review a diff before it commits. Round-trip, not a live link. |
+| 26 | **Bulk paste from clipboard** | Paste a column of quantities from a takeoff without leaving the row. |
+
+---
+
 ## Deliberate non-goals
 
 Recorded so nobody "fixes" them later:
