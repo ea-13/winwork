@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.tsbuild/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.vite/
