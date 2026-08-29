@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ErrorBanner, Layout, fileSize, money } from '../components/Layout';
+import { BuyoutLog } from '../components/BuyoutLog';
 import { ScopeGrid } from '../components/ScopeGrid';
 import { apiGet, apiPost } from '../lib/api';
 import { directUpload } from '../lib/upload';
@@ -31,7 +32,7 @@ const KINDS = ['DRAWING', 'SPEC', 'ADDENDUM', 'GEOTECH', 'OTHER'] as const;
 
 export function ProjectPage() {
   const { projectId = '' } = useParams();
-  const [tab, setTab] = useState<'scope' | 'documents' | 'packages'>('scope');
+  const [tab, setTab] = useState<'scope' | 'documents' | 'packages' | 'buyout'>('scope');
   const [project, setProject] = useState<Project | null>(null);
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [packages, setPackages] = useState<WorkPackage[]>([]);
@@ -113,7 +114,7 @@ export function ProjectPage() {
       <ErrorBanner message={error} />
 
       <nav className="flex gap-1 border-b border-slate-200">
-        {(['scope', 'documents', 'packages'] as const).map((name) => (
+        {(['scope', 'documents', 'packages', 'buyout'] as const).map((name) => (
           <button
             key={name}
             onClick={() => setTab(name)}
@@ -124,7 +125,7 @@ export function ProjectPage() {
             }`}
           >
             {name}
-            {name !== 'scope' && (
+            {(name === 'documents' || name === 'packages') && (
               <span className="ml-1.5 text-xs text-slate-400">
                 {name === 'documents' ? documents.length : packages.length}
               </span>
@@ -134,6 +135,8 @@ export function ProjectPage() {
       </nav>
 
       {tab === 'scope' && <ScopeGrid projectId={projectId} onError={setError} />}
+
+      {tab === 'buyout' && <BuyoutLog projectId={projectId} onError={setError} />}
 
       {tab === 'documents' && (
         <section className="space-y-3">
