@@ -205,6 +205,107 @@ projectsRouter.post(
   },
 );
 
+// -----------------------------------------------------------------------------
+// Scope items — the hub. Every quote line, gap and benchmark joins back here.
+// -----------------------------------------------------------------------------
+
+projectsRouter.get('/projects/:projectId/scope-items', async (req, res) => {
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const { data, error } = await supabaseForUser(auth.token)
+    .from('scope_item')
+    .select(
+      'id, scope_id, csi_division, csi_section, title, description, unit, quantity, ' +
+        'quantity_basis, is_locked, locked_at',
+    )
+    .eq('project_id', req.params.projectId)
+    .order('csi_division')
+    .order('scope_id');
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json(data ?? []);
+});
+
+/**
+ * Adds an empty row for a human to fill in.
+ *
+ * scope_id is {bid_id}-{division}-{seq}, sequenced within its division and
+ * generated here rather than typed, because it is the key every quote line,
+ * gap and change order joins back to. A typo in it is a broken join later.
+ */
+projectsRouter.post('/projects/:projectId/scope-items', requireRole('EST', 'BC'), async (req, res) => {
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const division = typeof body.csiDivision === 'string' ? body.csiDivision.trim() : '';
+  if (!DIVISIONS.some((entry) => entry.code === division)) {
+    res.status(400).json({ error: 'csiDivision must be a CSI division code, e.g. 22' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: project } = await db
+    .from('project')
+    .select('bid_id')
+    .eq('id', req.params.projectId)
+    .maybeSingle();
+
+  if (!project) {
+    res.status(404).json({ error: 'No such project' });
+    return;
+  }
+
+  const { data: existing } = await db
+    .from('scope_item')
+    .select('scope_id')
+    .eq('project_id', req.params.projectId)
+    .eq('csi_division', division);
+
+  const prefix = `${project.bid_id}-${division}-`;
+  const highest = (existing ?? []).reduce((max, row) => {
+    const suffix = String(row.scope_id ?? '').startsWith(prefix)
+      ? Number(String(row.scope_id).slice(prefix.length))
+      : Number.NaN;
+    return Number.isFinite(suffix) && suffix > max ? suffix : max;
+  }, 0);
+
+  const scopeId = `${prefix}${String(highest + 1).padStart(3, '0')}`;
+
+  const { data, error } = await db
+    .from('scope_item')
+    .insert({
+      tenant_id: auth.tenantId,
+      project_id: req.params.projectId,
+      scope_id: scopeId,
+      csi_division: division,
+      title: 'New scope item',
+      is_locked: false,
+    })
+    .select(
+      'id, scope_id, csi_division, csi_section, title, description, unit, quantity, ' +
+        'quantity_basis, is_locked, locked_at',
+    )
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.status(201).json(data);
+});
+
 /** Every package on the tenant, for screens that are not project-scoped yet. */
 projectsRouter.get('/packages', async (req, res) => {
   const auth = req.auth;
