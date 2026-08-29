@@ -2,6 +2,7 @@ import type { AgentContext } from './agent-run.js';
 import { AgentRun } from './agent-run.js';
 import { runDemoStream } from '../agents/demo-stream.js';
 import { runQuoteExtraction } from '../agents/extract-quote.js';
+import { runNormalisation } from '../agents/normalise-quote.js';
 import { supabaseAdmin } from './supabase.js';
 
 /**
@@ -14,6 +15,7 @@ type Agent = (ctx: AgentContext, payload: Record<string, unknown>) => Promise<vo
 const AGENTS: Record<string, Agent> = {
   demo_stream: (ctx) => runDemoStream(ctx),
   extract_quote: (ctx, payload) => runQuoteExtraction(ctx, payload),
+  normalise_quote: (ctx, payload) => runNormalisation(ctx, payload),
 };
 
 /**
