@@ -9,6 +9,7 @@ export const projectsRouter = Router();
  * per trade — a project has a dozen packages, not one.
  */
 export const DIVISIONS: { code: string; title: string }[] = [
+  { code: '01', title: 'General Requirements' },
   { code: '02', title: 'Existing Conditions' },
   { code: '03', title: 'Concrete' },
   { code: '04', title: 'Masonry' },
@@ -20,6 +21,7 @@ export const DIVISIONS: { code: string; title: string }[] = [
   { code: '10', title: 'Specialties' },
   { code: '11', title: 'Equipment' },
   { code: '12', title: 'Furnishings' },
+  { code: '13', title: 'Special Construction' },
   { code: '14', title: 'Conveying Equipment' },
   { code: '21', title: 'Fire Suppression' },
   { code: '22', title: 'Plumbing' },
