@@ -7,7 +7,8 @@
 > What did not change is the part that matters: **judging agent output is not delegable.** Sections
 > 3 and 5 still describe the only work that cannot be automated away.
 >
-> Live status is in [`06-ROADMAP.md`](06-ROADMAP.md).
+> Live status is in [`02-EXECUTION.md`](02-EXECUTION.md), which merges the old build-prompt
+> sequence and the roadmap into one file.
 
 
 **Owner:** Elie Al Chaer · **Started:** 2026-08-26 · **Product:** winprojects.ai
@@ -246,7 +247,7 @@ Not blocking week 1, but they need answers before there is a customer.
 | File | What it is |
 |---|---|
 | `01-CORE-SPEC.md` | Entities, tenancy, gates, agent contracts, the six rules |
-| `02-BUILD-PROMPTS.md` | P0–P20, paste into Replit one at a time |
+| `02-EXECUTION.md` | Every build step P0–P28, with status and verification |
 | `03-DEMO-SCRIPT.md` | **The acceptance criteria.** Ten minutes, beat by beat |
 | `04-EXECUTION-PLAN.md` | This file |
 

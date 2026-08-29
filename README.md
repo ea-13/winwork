@@ -28,21 +28,20 @@ Deliberately not a preconstruction suite. Takeoff and go/no-go scoring are out o
 | **R6** | Cite or stay silent |
 
 Each is enforced in code, not documented as an aspiration — see
-[`docs/06-ROADMAP.md`](docs/06-ROADMAP.md) for where.
+[`docs/02-EXECUTION.md`](docs/02-EXECUTION.md) for where.
 
 ## Docs
 
 | File | What it is |
 |---|---|
 | [`docs/01-CORE-SPEC.md`](docs/01-CORE-SPEC.md) | Entities, tenancy, gates, agent contracts |
-| [`docs/02-BUILD-PROMPTS.md`](docs/02-BUILD-PROMPTS.md) | P0–P20, the original build sequence |
+| [`docs/02-EXECUTION.md`](docs/02-EXECUTION.md) | **The build file** — every step P0–P28, status, and what proves it |
 | [`docs/03-DEMO-SCRIPT.md`](docs/03-DEMO-SCRIPT.md) | **The acceptance criteria** |
 | [`docs/04-EXECUTION-PLAN.md`](docs/04-EXECUTION-PLAN.md) | Week by week, hours, the go/no-go |
 | [`docs/05-TECH-DEBT.md`](docs/05-TECH-DEBT.md) | **The handover register** — everything deferred, and why |
-| [`docs/06-ROADMAP.md`](docs/06-ROADMAP.md) | **Current status**, milestone by milestone |
 
-**Start at [`06-ROADMAP.md`](docs/06-ROADMAP.md)** for where the build actually is. The P-numbers in
-`02` describe the original plan; the build diverged from it deliberately and `06` records how.
+**Start at [`02-EXECUTION.md`](docs/02-EXECUTION.md)** for where the build actually is. It carries
+every step with its status, its verification bar, and any deviation from the original plan.
 
 ## Stack
 
@@ -55,7 +54,7 @@ Each is enforced in code, not documented as an aspiration — see
 | Client | React 19 + Vite + Tailwind v4 + React Router |
 | Agents | Anthropic API (`claude-sonnet-5`), separate key from any Claude subscription |
 | Source of truth | This repo |
-| Hosting | Replit — **not deployed yet**, see `06-ROADMAP.md` |
+| Hosting | Not deployed yet — host chosen at P11, see `02-EXECUTION.md` |
 
 ## Running it
 
