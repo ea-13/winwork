@@ -3,13 +3,29 @@ import express from 'express';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env } from './env.js';
+import { requireAuth } from './lib/auth.js';
+import { startWorker } from './lib/worker.js';
+import { agentRunsRouter } from './routes/agent-runs.js';
+import { documentsRouter } from './routes/documents.js';
+import { gatesRouter } from './routes/gates.js';
 import { healthRouter } from './routes/health.js';
+import { sessionRouter } from './routes/session.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Public: liveness only.
 app.use('/api', healthRouter);
+
+// Everything else requires a verified session. Mounting the guard here rather
+// than per-route means a new route is protected by default — forgetting to add
+// auth is the mistake that matters, so the layout makes it the harder one.
+app.use('/api', requireAuth, sessionRouter);
+app.use('/api', requireAuth, documentsRouter);
+app.use('/api', requireAuth, agentRunsRouter);
+app.use('/api/gates', requireAuth, gatesRouter);
 
 // In production the API also serves the built client, so the deployment is a
 // single origin with a single URL. In dev, Vite serves the client and proxies
@@ -26,4 +42,5 @@ if (env.isProduction) {
 
 app.listen(env.port, () => {
   console.log(`server listening on http://localhost:${env.port}`);
+  startWorker();
 });

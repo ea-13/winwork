@@ -27,6 +27,9 @@ export const env = {
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
   /** Not needed until P6 (agent runtime), so absence is not fatal. */
   anthropicApiKey: optional('ANTHROPIC_API_KEY'),
+  /** Week 1 has one seeded login and no signup flow. Used only by the seed. */
+  demoUserEmail: process.env.DEMO_USER_EMAIL ?? 'demo@winprojects.ai',
+  demoUserPassword: optional('DEMO_USER_PASSWORD'),
   port: Number(process.env.PORT ?? 3001),
   isProduction: process.env.NODE_ENV === 'production',
 } as const;

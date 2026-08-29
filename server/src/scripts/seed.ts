@@ -8,6 +8,7 @@
  * re-running upserts the same rows rather than duplicating them.
  */
 import { createHash } from 'node:crypto';
+import { env } from '../env.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 
 // -----------------------------------------------------------------------------
@@ -32,9 +33,79 @@ function stableId(key: string): string {
 }
 
 const TENANT_ID = stableId('tenant');
-const USER_ID = stableId('user:demo@winprojects.ai');
 const PROJECT_ID = stableId('project:DEMO-2026-001');
 const PACKAGE_ID = stableId('package:interior-finishes');
+
+/**
+ * app_user.id is the Supabase Auth user's id, not a derived one, so auth.uid()
+ * identifies a real app_user row. Resolved at run time by ensureAuthUser().
+ */
+let USER_ID = '';
+
+const ROLES = ['BC', 'EST'] as const;
+
+/**
+ * Creates the one seeded login, or updates it if it already exists. Week 1 has
+ * no signup flow (spec section 8), so this is the only way an account appears.
+ *
+ * tenant_id, app_user_id and roles go into app_metadata, which Supabase copies
+ * into the JWT. That is the "server-side claim mapper" P4 asks for, and it is
+ * what current_tenant_id() reads in every RLS policy. app_metadata is writable
+ * only by service_role, never by the user.
+ */
+async function ensureAuthUser(): Promise<string> {
+  const password = env.demoUserPassword;
+  if (!password) {
+    console.error('  DEMO_USER_PASSWORD is not set in .env');
+    process.exit(1);
+  }
+
+  const appMetadata = { tenant_id: TENANT_ID, app_user_id: '', roles: [...ROLES] };
+
+  const { data: listed, error: listError } = await supabaseAdmin.auth.admin.listUsers({
+    page: 1,
+    perPage: 200,
+  });
+  if (listError) {
+    console.error(`  listing auth users failed: ${listError.message}`);
+    process.exit(1);
+  }
+
+  const existing = listed.users.find((user) => user.email === env.demoUserEmail);
+
+  if (existing) {
+    appMetadata.app_user_id = existing.id;
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
+      password,
+      app_metadata: appMetadata,
+    });
+    if (error) {
+      console.error(`  updating auth user failed: ${error.message}`);
+      process.exit(1);
+    }
+    return existing.id;
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email: env.demoUserEmail,
+    password,
+    email_confirm: true,
+  });
+  if (error || !data.user) {
+    console.error(`  creating auth user failed: ${error?.message ?? 'no user returned'}`);
+    process.exit(1);
+  }
+
+  appMetadata.app_user_id = data.user.id;
+  const { error: metaError } = await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+    app_metadata: appMetadata,
+  });
+  if (metaError) {
+    console.error(`  setting app_metadata failed: ${metaError.message}`);
+    process.exit(1);
+  }
+  return data.user.id;
+}
 
 const BID_ID = 'DEMO-2026-001';
 const now = new Date();
@@ -276,24 +347,47 @@ function fail(step: string, error: { message: string } | null): void {
 }
 
 async function main(): Promise<void> {
-  console.log(`seeding demo tenant into ${new URL(process.env.SUPABASE_URL ?? '').host}\n`);
+  console.log(`seeding demo tenant into ${new URL(env.supabaseUrl).host}\n`);
+
+  USER_ID = await ensureAuthUser();
 
   const tenant = await supabaseAdmin
     .from('tenant')
     .upsert({ id: TENANT_ID, name: 'Demo Construction Co' });
   fail('tenant', tenant.error);
 
+  // An earlier seed may have written app_user with a derived id, before the
+  // auth user existed. Nothing but seeded rows lives under this tenant, so
+  // rebuilding it is safe -- and if evidence rows ever do exist the append-only
+  // triggers will refuse the delete, which is the correct outcome.
+  const { data: stale } = await supabaseAdmin
+    .from('app_user')
+    .select('id')
+    .eq('tenant_id', TENANT_ID)
+    .eq('email', env.demoUserEmail)
+    .maybeSingle();
+
+  if (stale && stale.id !== USER_ID) {
+    console.log('  rebuilding demo tenant: app_user id now tracks the auth user\n');
+    const wipe = await supabaseAdmin.from('tenant').delete().eq('id', TENANT_ID);
+    fail('rebuild', wipe.error);
+    const again = await supabaseAdmin
+      .from('tenant')
+      .upsert({ id: TENANT_ID, name: 'Demo Construction Co' });
+    fail('tenant', again.error);
+  }
+
   const user = await supabaseAdmin.from('app_user').upsert({
     id: USER_ID,
     tenant_id: TENANT_ID,
-    email: 'demo@winprojects.ai',
+    email: env.demoUserEmail,
     display_name: 'Demo Estimator',
   });
   fail('app_user', user.error);
 
   // Roles are grants: a two-estimator GC has one person holding both.
   const roles = await supabaseAdmin.from('user_role').upsert(
-    ['BC', 'EST'].map((role) => ({
+    ROLES.map((role) => ({
       id: stableId(`role:${role}`),
       tenant_id: TENANT_ID,
       user_id: USER_ID,

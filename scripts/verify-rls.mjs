@@ -47,13 +47,16 @@ const tables = await q(`
   where n.nspname = 'public' and c.relkind = 'r' and c.relname <> 'schema_migrations'
   order by c.relname`);
 
-check(tables.length === 29, 'table count', `${tables.length} tables`);
+// A floor, not an equality: later migrations legitimately add tables, and a
+// hardcoded count turns every addition into a false alarm. Losing one is still
+// caught.
+check(tables.length >= 29, 'table count at or above the P2 baseline', `${tables.length} tables`);
 
 const noRls = tables.filter((t) => !t.relrowsecurity).map((t) => t.relname);
-check(noRls.length === 0, 'RLS enabled on every table', noRls.join(', ') || 'all 29');
+check(noRls.length === 0, 'RLS enabled on every table', noRls.join(', ') || `all ${tables.length}`);
 
 const noPolicy = tables.filter((t) => t.policies === 0).map((t) => t.relname);
-check(noPolicy.length === 0, 'every table has a policy', noPolicy.join(', ') || 'all 29');
+check(noPolicy.length === 0, 'every table has a policy', noPolicy.join(', ') || `all ${tables.length}`);
 
 const missingTenant = await q(`
   select c.relname from pg_class c
@@ -64,7 +67,7 @@ const missingTenant = await q(`
       select 1 from pg_attribute a
       where a.attrelid=c.oid and a.attname='tenant_id' and a.attnum>0 and not a.attisdropped)`);
 check(missingTenant.length === 0, 'tenant_id on every tenant-scoped table',
-  missingTenant.map((r) => r.relname).join(', ') || '26 tables');
+  missingTenant.map((r) => r.relname).join(', ') || `${tables.length - 4} tables`);
 
 const unindexedFk = await q(`
   select con.conname, cl.relname
