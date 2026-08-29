@@ -5,6 +5,7 @@ import { ActivityStream } from '../components/ActivityStream';
 import { ErrorBanner, Layout, fileSize } from '../components/Layout';
 import { LevelingMatrix } from '../components/LevelingMatrix';
 import { RiskLog } from '../components/RiskLog';
+import { Solicitation } from '../components/Solicitation';
 import { apiGet, apiPost } from '../lib/api';
 import { directUpload } from '../lib/upload';
 
@@ -72,7 +73,7 @@ function Promote({
 
 export function PackagePage() {
   const { packageId = '' } = useParams();
-  const [tab, setTab] = useState<'bids' | 'leveling' | 'gaps'>('bids');
+  const [tab, setTab] = useState<'bids' | 'bidders' | 'leveling' | 'gaps'>('bids');
   const [pkg, setPkg] = useState<WorkPackage | null>(null);
   const [documents, setDocuments] = useState<QuoteDocument[]>([]);
   const [runId, setRunId] = useState<string | null>(null);
@@ -142,15 +143,31 @@ export function PackagePage() {
         </>
       }
     >
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">{pkg?.name ?? 'Package'}</h1>
-        <p className="text-sm text-slate-500">{pkg?.status}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-900">{pkg?.name ?? 'Package'}</h1>
+          <p className="text-sm text-slate-500">{pkg?.status}</p>
+        </div>
+        <button
+          onClick={() =>
+            void guard(async () => {
+              const result = await apiPost<{ queued: number; note: string }>(
+                `/packages/${packageId}/autopilot`,
+              );
+              setError(result.note);
+            })
+          }
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
+          title="Extracts every un-read quote, then parks everything in the review queue. Crosses no gate."
+        >
+          Autopilot
+        </button>
       </div>
 
       <ErrorBanner message={error} />
 
       <nav className="flex gap-1 border-b border-slate-200">
-        {(['bids', 'leveling', 'gaps'] as const).map((name) => (
+        {(['bids', 'bidders', 'leveling', 'gaps'] as const).map((name) => (
           <button
             key={name}
             onClick={() => setTab(name)}
@@ -291,6 +308,8 @@ export function PackagePage() {
           {runId && <ActivityStream runId={runId} />}
         </section>
       )}
+
+      {tab === 'bidders' && <Solicitation packageId={packageId} onError={setError} />}
 
       {tab === 'leveling' && <LevelingMatrix packageId={packageId} onError={setError} />}
 

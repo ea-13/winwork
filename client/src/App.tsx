@@ -5,6 +5,8 @@ import { Login } from './pages/Login';
 import { PackagePage } from './pages/Package';
 import { ProjectPage } from './pages/Project';
 import { ProjectsPage } from './pages/Projects';
+import { ReviewQueuePage } from './pages/ReviewQueue';
+import { SubsPage } from './pages/Subs';
 
 function Protected({ children }: { children: ReactNode }) {
   const { session, loading } = useSession();
@@ -47,6 +49,22 @@ export default function App() {
         element={
           <Protected>
             <PackagePage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/subcontractors"
+        element={
+          <Protected>
+            <SubsPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/review"
+        element={
+          <Protected>
+            <ReviewQueuePage />
           </Protected>
         }
       />
