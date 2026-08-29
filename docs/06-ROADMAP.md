@@ -8,6 +8,46 @@ assumed Replit Agent was building it and assumed one package per project. Neithe
 
 ---
 
+## M-numbers and P-numbers
+
+Two numbering schemes exist and they are not the same thing.
+
+- **P0–P20** are the original build prompts in [`02-BUILD-PROMPTS.md`](02-BUILD-PROMPTS.md).
+- **M0–M20** are the milestones below. They exist because roughly a third of what got built has no
+  P-number — that work came from real files and real use, not from the original plan.
+
+| Milestone | Original prompt | Note |
+|---|---|---|
+| M0 Foundations | P0, P1 | |
+| M1 Data model and tenancy | P2 | |
+| M2 Identity and gates | P4 | |
+| M3 Documents | P5 | Extended: project-level bid set, direct-to-storage |
+| M4 Agent runtime | P6 | |
+| M5 Project structure | **none** | Projects CRUD, per-division packages |
+| M6 Sub list import | P15 | Parser only so far |
+| M6b Audited editing | **none** | Every field human-editable |
+| M6c Spreadsheet grid | **none** | |
+| M7 Scope of Work grid | **none** | Screens for `scope_item`; P18 is the *agent* that drafts them |
+| M7b Import review screen | P15 | |
+| **M8 Quote extraction** | **P7** | The hinge |
+| M9 Normalisation | P8 | |
+| M10 Add-back estimation | P9 | |
+| M11 Scope gaps | P10 | |
+| M12 Leveling matrix | P11 | |
+| M13 Buyout log | **none** | Added at Elie's direction |
+| M14 Risk log and export | P12 | |
+| M15 Division Experts | P13 | |
+| M16 Solicitation screens | P16 | |
+| M17 Autopilot + review queue | P17 | |
+| M18 SoW drafter | P18 | |
+| M19 Provenance and ledger | P19 | |
+| M20 Hardening | P20 | |
+| — | P3 | Seed, done as part of M1 |
+| — | P14 | CO archaeology, parked |
+| — | P19/P20 | See M19, M20 |
+
+---
+
 ## Done
 
 ### M0 · Foundations
