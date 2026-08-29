@@ -4,6 +4,7 @@ import type { QuoteDocument } from 'shared';
 import { ActivityStream } from '../components/ActivityStream';
 import { ErrorBanner, Layout, fileSize } from '../components/Layout';
 import { LevelingMatrix } from '../components/LevelingMatrix';
+import { PackageScope } from '../components/PackageScope';
 import { RiskLog } from '../components/RiskLog';
 import { Solicitation } from '../components/Solicitation';
 import { apiGet, apiPost } from '../lib/api';
@@ -73,7 +74,7 @@ function Promote({
 
 export function PackagePage() {
   const { packageId = '' } = useParams();
-  const [tab, setTab] = useState<'bids' | 'bidders' | 'leveling' | 'gaps'>('bids');
+  const [tab, setTab] = useState<'scope' | 'bids' | 'bidders' | 'leveling' | 'gaps'>('bids');
   const [pkg, setPkg] = useState<WorkPackage | null>(null);
   const [documents, setDocuments] = useState<QuoteDocument[]>([]);
   const [runId, setRunId] = useState<string | null>(null);
@@ -167,7 +168,7 @@ export function PackagePage() {
       <ErrorBanner message={error} />
 
       <nav className="flex gap-1 border-b border-slate-200">
-        {(['bids', 'bidders', 'leveling', 'gaps'] as const).map((name) => (
+        {(['scope', 'bids', 'bidders', 'leveling', 'gaps'] as const).map((name) => (
           <button
             key={name}
             onClick={() => setTab(name)}
@@ -184,6 +185,14 @@ export function PackagePage() {
           </button>
         ))}
       </nav>
+
+      {tab === 'scope' && (
+        <PackageScope
+          packageId={packageId}
+          projectId={pkg?.project_id ?? null}
+          onError={setError}
+        />
+      )}
 
       {tab === 'bids' && (
         <section className="space-y-3">
