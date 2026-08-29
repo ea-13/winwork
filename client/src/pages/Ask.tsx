@@ -6,6 +6,7 @@ import { apiGet, apiPost } from '../lib/api';
 type Thread = {
   id: string;
   title: string;
+  mode: 'EXPERT' | 'DOCUMENT';
   project_id: string | null;
   divisions: string[];
   document_ids: string[];
@@ -53,6 +54,7 @@ export function AskPage() {
   const [documents, setDocuments] = useState<ProjectDoc[]>([]);
   const [attached, setAttached] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [mode, setMode] = useState<'EXPERT' | 'DOCUMENT'>('EXPERT');
   const [question, setQuestion] = useState('');
   const [thinking, setThinking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -102,6 +104,7 @@ export function AskPage() {
       setThreadId(id);
       setMessages(data.messages);
       setAttached(new Set(data.thread.document_ids));
+      setMode(data.thread.mode ?? 'EXPERT');
       setPicked(new Set(data.thread.divisions));
       if (data.thread.project_id) setParams({ project: data.thread.project_id });
     } catch (caught) {
@@ -137,6 +140,7 @@ export function AskPage() {
           projectId: projectId || undefined,
           divisions: [...picked],
           documentIds: [...attached],
+          mode,
         });
         id = thread.id;
         setThreadId(id);
@@ -146,6 +150,7 @@ export function AskPage() {
         question: text,
         divisions: [...picked],
         documentIds: [...attached],
+        mode,
       });
 
       setMessages((current) => [...current, result.message]);
@@ -217,6 +222,33 @@ export function AskPage() {
           <ErrorBanner message={error} />
 
           <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex gap-1">
+              {(
+                [
+                  ['EXPERT', 'Ask the expert', 'Reasons from division knowledge and gap patterns'],
+                  ['DOCUMENT', 'Read my files', 'Answers only from the documents you attach'],
+                ] as const
+              ).map(([value, label, hint]) => (
+                <button
+                  key={value}
+                  onClick={() => setMode(value)}
+                  title={hint}
+                  className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
+                    mode === value
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-300 text-slate-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500">
+              {mode === 'EXPERT'
+                ? 'Reasons from your divisions’ gap patterns and the scope baseline. Cites what it used, and will not give you a price.'
+                : 'Answers from the attached files only. Quotes the passage and gives the page, and says so when the documents do not settle it.'}
+            </p>
+
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-slate-600">Project</span>
               <select
@@ -235,7 +267,7 @@ export function AskPage() {
               </select>
             </div>
 
-            <div>
+            <div className={mode === 'DOCUMENT' ? 'hidden' : ''}>
               <span className="text-xs font-medium text-slate-600">Divisions</span>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {divisions.map((division) => (
@@ -301,9 +333,19 @@ export function AskPage() {
               <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-sm text-slate-500">
                 <p className="mb-2 font-medium text-slate-700">Try asking:</p>
                 <ul className="space-y-1 text-slate-500">
-                  <li>“Does this spec call for a backflow preventer, and is it in my scope?”</li>
-                  <li>“What does division 22 usually leave out that bites on a residential ADU?”</li>
-                  <li>“Two subs both assume the other carries the trenching. Who normally does?”</li>
+                  {mode === 'EXPERT' ? (
+                    <>
+                      <li>&ldquo;What does division 22 usually leave out on a residential ADU?&rdquo;</li>
+                      <li>&ldquo;Two subs both assume the other carries the trenching. Who normally does?&rdquo;</li>
+                      <li>&ldquo;Is anything missing from my scope that bites on this kind of job?&rdquo;</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>&ldquo;Does this spec call for a backflow preventer? Quote it.&rdquo;</li>
+                      <li>&ldquo;What exactly does this quote exclude?&rdquo;</li>
+                      <li>&ldquo;What does the plan set say about the water heater location?&rdquo;</li>
+                    </>
+                  )}
                 </ul>
               </div>
             )}

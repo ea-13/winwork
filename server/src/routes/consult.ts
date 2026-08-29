@@ -31,6 +31,7 @@ type ThreadRow = {
   project_id: string | null;
   divisions: string[];
   document_ids: string[];
+  mode: 'EXPERT' | 'DOCUMENT';
 };
 
 consultRouter.get('/consult/threads', async (req, res) => {
@@ -42,7 +43,7 @@ consultRouter.get('/consult/threads', async (req, res) => {
 
   const query = supabaseForUser(auth.token)
     .from('consult_thread')
-    .select('id, title, project_id, divisions, document_ids, updated_at')
+    .select('id, title, project_id, divisions, document_ids, mode, updated_at')
     .order('updated_at', { ascending: false })
     .limit(50);
 
@@ -97,6 +98,7 @@ consultRouter.post('/consult/threads', async (req, res) => {
       title: typeof body.title === 'string' && body.title.trim() ? body.title.trim() : 'New question',
       divisions: Array.isArray(body.divisions) ? body.divisions : [],
       document_ids: Array.isArray(body.documentIds) ? body.documentIds : [],
+      mode: body.mode === 'DOCUMENT' ? 'DOCUMENT' : 'EXPERT',
       created_by: auth.userId,
     })
     .select('*')
@@ -135,7 +137,7 @@ consultRouter.post('/consult/threads/:threadId/ask', async (req, res) => {
 
   const { data: thread } = await db
     .from('consult_thread')
-    .select('id, project_id, divisions, document_ids')
+    .select('id, project_id, divisions, document_ids, mode')
     .eq('id', threadId)
     .maybeSingle();
 
@@ -156,6 +158,18 @@ consultRouter.post('/consult/threads/:threadId/ask', async (req, res) => {
   const divisions = Array.isArray(body.divisions) && body.divisions.length > 0
     ? (body.divisions as string[])
     : row.divisions;
+
+  const mode: 'EXPERT' | 'DOCUMENT' =
+    body.mode === 'DOCUMENT' || body.mode === 'EXPERT' ? body.mode : row.mode;
+
+  // Reading documents with no documents attached is a question with no
+  // material. Say so rather than quietly answering from general knowledge.
+  if (mode === 'DOCUMENT' && documentIds.length === 0) {
+    res.status(400).json({
+      error: 'Reading mode needs at least one document attached. Tick a file, or switch to the expert.',
+    });
+    return;
+  }
 
   // ------------------------------------------------------------- retrieval
 
@@ -237,6 +251,7 @@ consultRouter.post('/consult/threads/:threadId/ask', async (req, res) => {
   try {
     const answer = await askExpert({
       question,
+      mode,
       divisions,
       patterns: (patterns ?? []).map((pattern) => ({
         id: String(pattern.id),
@@ -282,6 +297,7 @@ consultRouter.post('/consult/threads/:threadId/ask', async (req, res) => {
       .update({
         document_ids: documentIds,
         divisions,
+        mode,
         updated_at: new Date().toISOString(),
         // First question becomes the thread's name, so a list of threads reads.
         ...(nextSeq === 1 ? { title: question.slice(0, 80) } : {}),

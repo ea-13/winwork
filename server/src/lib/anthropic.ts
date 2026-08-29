@@ -151,6 +151,34 @@ HOW TO ANSWER:
 
 Be direct and brief. An estimator reading this is mid-task.`;
 
+/**
+ * Reading the documents, rather than reasoning about the trade.
+ *
+ * A different job needs a different brief. The expert is constrained on
+ * purpose — cite a pattern, never a price — and those constraints get in the
+ * way when the question is "what does this letter actually say", where the
+ * right answer is frequently a quote from page four and nothing else.
+ */
+const DOCUMENT_SYSTEM = `You answer questions about construction documents that
+have been put in front of you: drawings, specifications, addenda, quotes,
+letters, schedules.
+
+HOW TO ANSWER:
+
+- Answer from the documents. Quote them where a quote settles it, and always
+  give the page.
+- If the documents do not say, say they do not say. Do not reason your way to a
+  likely answer and present it as what the document says — those are different
+  claims and an estimator is about to act on the difference.
+- Distinguish clearly when you are reading versus inferring. "Page 7 says X" and
+  "that usually implies Y" are separate sentences.
+- Numbers that appear in the document may be quoted as written. Do not compute
+  new ones, do not total partial figures, and do not convert units silently.
+- Be brief. Point at the passage rather than summarising around it.
+
+You are reading for a preconstruction team, so lead with what they would act
+on: what is required, who carries it, what is missing.`;
+
 const NEWLINE = '\n';
 
 /**
@@ -162,6 +190,8 @@ const NEWLINE = '\n';
  */
 export async function askExpert(options: {
   question: string;
+  /** EXPERT reasons from division knowledge; DOCUMENT answers from the files. */
+  mode?: 'EXPERT' | 'DOCUMENT';
   divisions: string[];
   patterns: ExpertPattern[];
   scope: ExpertScopeItem[];
@@ -209,7 +239,19 @@ export async function askExpert(options: {
           )
           .join(NEWLINE);
 
-  const knowledge = [
+  const documentOnly = options.mode === 'DOCUMENT';
+
+  const knowledge = documentOnly
+    ? [
+        options.attachments.length > 0
+          ? `DOCUMENTS: ${options.attachments.map((a) => a.filename).join(', ')}`
+          : 'NO DOCUMENTS ATTACHED — say so rather than answering from general knowledge.',
+        '',
+        '---',
+        '',
+        `QUESTION: ${options.question}`,
+      ].join(NEWLINE)
+    : [
     options.divisions.length > 0
       ? `DIVISIONS IN PLAY: ${options.divisions.join(', ')}`
       : 'DIVISIONS IN PLAY: all',
@@ -239,7 +281,7 @@ export async function askExpert(options: {
   const stream = getClient().messages.stream({
     model: MODEL,
     max_tokens: 8000,
-    system: EXPERT_SYSTEM,
+    system: documentOnly ? DOCUMENT_SYSTEM : EXPERT_SYSTEM,
     thinking: { type: 'adaptive' },
     messages,
   });
