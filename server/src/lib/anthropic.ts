@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import type { z } from 'zod';
 import { env } from '../env.js';
 
 /**
@@ -69,6 +71,70 @@ export async function complete(options: CompleteOptions): Promise<CompletionResu
 
   return {
     text,
+    inputTokens,
+    outputTokens,
+    costUsd:
+      (inputTokens / 1_000_000) * PRICE_PER_MTOK.input +
+      (outputTokens / 1_000_000) * PRICE_PER_MTOK.output,
+  };
+}
+
+export type StructuredResult<T> = {
+  value: T;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+};
+
+/**
+ * A model call that must return a specific shape.
+ *
+ * Structured output rather than "please reply with JSON": extraction feeds
+ * arithmetic downstream, and a response that almost parses is worse than one
+ * that fails loudly. The schema is enforced at the API, so a malformed reply is
+ * retried by the SDK rather than becoming a runtime surprise here.
+ */
+export async function extractStructured<T extends z.ZodType>(options: {
+  system: string;
+  schema: T;
+  instruction: string;
+  pdf?: Buffer;
+  maxTokens?: number;
+}): Promise<StructuredResult<z.infer<T>>> {
+  const content: Anthropic.ContentBlockParam[] = [];
+
+  if (options.pdf) {
+    // The document goes before the instruction: Claude reads better when the
+    // material precedes the question asked of it.
+    content.push({
+      type: 'document',
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: options.pdf.toString('base64'),
+      },
+    });
+  }
+  content.push({ type: 'text', text: options.instruction });
+
+  const response = await getClient().messages.parse({
+    model: MODEL,
+    max_tokens: options.maxTokens ?? 16000,
+    system: options.system,
+    thinking: { type: 'adaptive' },
+    output_config: { format: zodOutputFormat(options.schema) },
+    messages: [{ role: 'user', content }],
+  });
+
+  if (!response.parsed_output) {
+    throw new Error('The model did not return a parseable result');
+  }
+
+  const inputTokens = response.usage.input_tokens;
+  const outputTokens = response.usage.output_tokens;
+
+  return {
+    value: response.parsed_output as z.infer<T>,
     inputTokens,
     outputTokens,
     costUsd:

@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import type { AgentEvent } from 'shared';
+import { PROMPT_VERSION } from '../agents/extract-quote.js';
+import { MODEL } from '../lib/anthropic.js';
 import { refuseSendPaths } from '../lib/auth.js';
 import { supabaseForUser } from '../lib/supabase.js';
 
@@ -43,6 +45,67 @@ agentRunsRouter.post('/agent-runs/demo', refuseSendPaths, async (req, res) => {
     job_type: 'demo_stream',
     agent_run_id: run.id,
     payload: {},
+  });
+
+  if (jobError) {
+    res.status(500).json({ error: jobError.message });
+    return;
+  }
+
+  res.status(202).json({ runId: run.id });
+});
+
+/**
+ * Runs extraction over one uploaded quote. Returns immediately with a run id;
+ * the work happens in the worker, and the client watches the activity stream.
+ */
+agentRunsRouter.post('/quotes/:quoteId/extract', refuseSendPaths, async (req, res) => {
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: quote } = await db
+    .from('quote')
+    .select('id, source_file_id, source_filename, package_id')
+    .eq('id', req.params.quoteId)
+    .maybeSingle();
+
+  if (!quote) {
+    res.status(404).json({ error: 'No such quote' });
+    return;
+  }
+  if (!quote.source_file_id) {
+    res.status(400).json({ error: 'That quote has no uploaded document' });
+    return;
+  }
+
+  const { data: run, error: runError } = await db
+    .from('agent_run')
+    .insert({
+      tenant_id: auth.tenantId,
+      agent_type: 'extract_quote',
+      status: 'QUEUED',
+      input_ref: quote.source_filename ?? quote.source_file_id,
+      model: MODEL,
+      prompt_version: PROMPT_VERSION,
+    })
+    .select('id')
+    .single();
+
+  if (runError || !run) {
+    res.status(500).json({ error: runError?.message ?? 'Could not create the agent run' });
+    return;
+  }
+
+  const { error: jobError } = await db.from('job').insert({
+    tenant_id: auth.tenantId,
+    job_type: 'extract_quote',
+    agent_run_id: run.id,
+    payload: { quoteId: quote.id },
   });
 
   if (jobError) {

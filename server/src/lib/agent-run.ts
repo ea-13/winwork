@@ -29,6 +29,10 @@ export type AgentContext = {
   readonly tenantId: string;
   emit(eventType: AgentEventType, message: string, payload?: unknown): Promise<void>;
   draft(input: DraftInput): Promise<void>;
+  /** Reads one row. Reading is not the R2 concern; writing is. */
+  read<T = Record<string, unknown>>(table: string, id: string): Promise<T | null>;
+  /** Reads a stored document's bytes. */
+  readFile(bucket: string, path: string): Promise<Buffer | null>;
 };
 
 /**
@@ -141,6 +145,18 @@ export class AgentRun implements AgentContext {
       fill_tag: input.fillTag,
     });
     if (error) throw new Error(`Could not write draft: ${error.message}`);
+  }
+
+  /** Read-only. An agent needs to see its inputs; it still cannot write state. */
+  async read<T = Record<string, unknown>>(table: string, id: string): Promise<T | null> {
+    const { data } = await this.db.from(table).select('*').eq('id', id).maybeSingle();
+    return (data as T | null) ?? null;
+  }
+
+  async readFile(bucket: string, path: string): Promise<Buffer | null> {
+    const { data, error } = await this.db.storage.from(bucket).download(path);
+    if (error || !data) return null;
+    return Buffer.from(await data.arrayBuffer());
   }
 
   async finish(status: 'DONE' | 'FAILED', tokenCost?: number): Promise<void> {

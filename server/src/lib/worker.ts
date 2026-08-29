@@ -1,6 +1,7 @@
 import type { AgentContext } from './agent-run.js';
 import { AgentRun } from './agent-run.js';
 import { runDemoStream } from '../agents/demo-stream.js';
+import { runQuoteExtraction } from '../agents/extract-quote.js';
 import { supabaseAdmin } from './supabase.js';
 
 /**
@@ -12,7 +13,21 @@ type Agent = (ctx: AgentContext, payload: Record<string, unknown>) => Promise<vo
 
 const AGENTS: Record<string, Agent> = {
   demo_stream: (ctx) => runDemoStream(ctx),
+  extract_quote: (ctx, payload) => runQuoteExtraction(ctx, payload),
 };
+
+/**
+ * Status bookkeeping on the row an agent is working from.
+ *
+ * The worker does this, not the agent: quote.status is system state with a [S]
+ * fill tag, and giving AgentContext a way to write it would put a hole in the
+ * guarantee that agents cannot touch canonical rows.
+ */
+async function setQuoteStatus(job: JobRow, status: string): Promise<void> {
+  const quoteId = job.payload?.quoteId;
+  if (job.job_type !== 'extract_quote' || typeof quoteId !== 'string') return;
+  await supabaseAdmin.from('quote').update({ status }).eq('id', quoteId);
+}
 
 type JobRow = {
   id: string;
@@ -69,8 +84,10 @@ async function runOne(): Promise<boolean> {
       ? await AgentRun.resume(job.agent_run_id, job.tenant_id)
       : await AgentRun.start({ tenantId: job.tenant_id, agentType: job.job_type });
 
+    await setQuoteStatus(job, 'EXTRACTING');
     await agent(run, job.payload ?? {});
     await run.finish('DONE');
+    await setQuoteStatus(job, 'EXTRACTED');
     await finish(job, 'DONE');
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught);
@@ -83,6 +100,7 @@ async function runOne(): Promise<boolean> {
       await run.emit('ERROR', message).catch(() => undefined);
       if (exhausted) await run.finish('FAILED').catch(() => undefined);
     }
+    if (exhausted) await setQuoteStatus(job, 'FAILED').catch(() => undefined);
     // Back to QUEUED so claim_job picks it up again, until the attempt budget
     // is spent — attempts was already incremented by the claim.
     await finish(job, exhausted ? 'DEAD_LETTER' : 'QUEUED', message);

@@ -56,6 +56,17 @@ export function PackagePage() {
     await refresh().catch(() => undefined);
   }
 
+  async function extract(quoteId: string) {
+    setError(null);
+    try {
+      const { runId: id } = await apiPost<{ runId: string }>(`/quotes/${quoteId}/extract`);
+      setRunId(id);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }
+
   async function startDemoRun() {
     setError(null);
     try {
@@ -138,6 +149,7 @@ export function PackagePage() {
               <th className="px-4 py-2 font-medium">Size</th>
               <th className="px-4 py-2 font-medium">Uploaded</th>
               <th className="px-4 py-2 font-medium">Extraction</th>
+              <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -152,6 +164,15 @@ export function PackagePage() {
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
                     {document.status.replace(/_/g, ' ').toLowerCase()}
                   </span>
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <button
+                    onClick={() => void extract(document.id)}
+                    disabled={document.status === 'EXTRACTING'}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-40"
+                  >
+                    {document.status === 'EXTRACTED' ? 'Re-extract' : 'Extract'}
+                  </button>
                 </td>
               </tr>
             ))}
