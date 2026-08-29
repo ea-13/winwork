@@ -11,10 +11,10 @@ plus a ranked log of what nobody priced.
 
 ## The chain
 
-**Scope of Work → Sub Solicitation → Bid Leveling**, with a scope-gap risk log as the output.
+**Scope of Work → Sub Solicitation → Bid Leveling**, with a scope-gap risk log and a buyout log as
+the output.
 
-Deliberately not a preconstruction suite. Takeoff, drawings ingestion, and go/no-go scoring are out
-of scope.
+Deliberately not a preconstruction suite. Takeoff and go/no-go scoring are out of scope.
 
 ## The rules
 
@@ -27,20 +27,82 @@ of scope.
 | **R5** | Uncalibrated benchmark ranges are internal only |
 | **R6** | Cite or stay silent |
 
+Each is enforced in code, not documented as an aspiration — see
+[`docs/06-ROADMAP.md`](docs/06-ROADMAP.md) for where.
+
 ## Docs
 
 | File | What it is |
 |---|---|
 | [`docs/01-CORE-SPEC.md`](docs/01-CORE-SPEC.md) | Entities, tenancy, gates, agent contracts |
-| [`docs/02-BUILD-PROMPTS.md`](docs/02-BUILD-PROMPTS.md) | P0–P20, paste into Replit one at a time |
+| [`docs/02-BUILD-PROMPTS.md`](docs/02-BUILD-PROMPTS.md) | P0–P20, the original build sequence |
 | [`docs/03-DEMO-SCRIPT.md`](docs/03-DEMO-SCRIPT.md) | **The acceptance criteria** |
 | [`docs/04-EXECUTION-PLAN.md`](docs/04-EXECUTION-PLAN.md) | Week by week, hours, the go/no-go |
+| [`docs/05-TECH-DEBT.md`](docs/05-TECH-DEBT.md) | **The handover register** — everything deferred, and why |
+| [`docs/06-ROADMAP.md`](docs/06-ROADMAP.md) | **Current status**, milestone by milestone |
+
+**Start at [`06-ROADMAP.md`](docs/06-ROADMAP.md)** for where the build actually is. The P-numbers in
+`02` describe the original plan; the build diverged from it deliberately and `06` records how.
 
 ## Stack
 
-Supabase (Postgres + RLS + Auth + Storage) · React + Vite · Express · Anthropic API · hosted on
-Replit, source of truth on GitHub.
+| Layer | Choice |
+|---|---|
+| Database | Supabase Postgres — RLS gives real tenant isolation without app-layer code |
+| Auth | Supabase Auth, `tenant_id` and roles as JWT claims |
+| Storage | Supabase Storage, private buckets, direct-to-storage signed uploads |
+| API | Express + TypeScript |
+| Client | React 19 + Vite + Tailwind v4 + React Router |
+| Agents | Anthropic API (`claude-sonnet-5`), separate key from any Claude subscription |
+| Source of truth | This repo |
+| Hosting | Replit — **not deployed yet**, see `06-ROADMAP.md` |
 
-## Getting started
+## Running it
 
-Start with `docs/04-EXECUTION-PLAN.md` §5, then work `docs/02-BUILD-PROMPTS.md` from P0.
+```bash
+npm install
+cp .env.example .env      # then fill it in — never commit .env
+npm run migrate           # applies supabase/migrations/*.sql
+npm run seed              # demo tenant, one login, 23 division experts
+npm run dev               # API on :3001, client on :5173
+```
+
+Log in with `DEMO_USER_EMAIL` / `DEMO_USER_PASSWORD` from `.env`.
+
+### Scripts
+
+| Command | Does |
+|---|---|
+| `npm run dev` | API and client together, watch mode |
+| `npm run build` | Builds client then server |
+| `npm start` | Production server; also serves the built client on one port |
+| `npm run migrate` | Applies pending migrations, then re-applies the index rules |
+| `npm run seed` | Idempotent demo tenant and division-expert stubs |
+| `npm run typecheck` | `tsc -b` across all three workspaces |
+| `npm run verify:rls` | 17 checks: RLS coverage, append-only, live cross-tenant isolation |
+| `npm run verify:app` | 20 end-to-end checks: auth, gates, upload, agent runtime |
+| `npm run verify` | Both |
+
+`verify:app` needs the server running.
+
+## Repository layout
+
+```
+client/      React app
+server/      Express API, agents, job worker, seed
+shared/      Types crossing the client/server line — no secrets
+scripts/     Migration runner and verification suites
+supabase/    SQL migrations, applied in filename order
+docs/        Specs, roadmap, tech debt
+samples/     Real documents for testing — gitignored, never committed
+```
+
+## Conventions worth knowing before changing anything
+
+- **Migrations are immutable.** The runner refuses a file whose contents changed after it was
+  applied. Add a new one.
+- **`draft`, `approval` and `audit_event` cannot be updated or deleted.** Database triggers enforce
+  it. Deleting a tenant that holds evidence rows fails, and that is correct.
+- **A pre-commit hook blocks committed credentials.** A fresh clone needs
+  `git config core.hooksPath .githooks` once.
+- **Nothing gets deferred silently.** A shortcut lands in `docs/05-TECH-DEBT.md` in the same commit.

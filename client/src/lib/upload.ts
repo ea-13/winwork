@@ -41,7 +41,7 @@ export async function directUpload<T>({
     // so say which limit was hit rather than surfacing a bare "failed".
     throw new Error(
       /exceeded|too large|maximum/i.test(error.message)
-        ? `${file.name} is too large for the current Supabase plan (50MB per file).`
+        ? `${file.name} exceeds the storage size limit for this project.`
         : `${file.name}: ${error.message}`,
     );
   }

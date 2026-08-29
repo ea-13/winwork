@@ -1,5 +1,15 @@
 # WinProjects — Execution Plan
 
+> **Status note (2026-08-29).** Section 2 and 3 assign roughly 80% of code volume to Replit Agent.
+> That decision was reversed on day one: the build is written directly against this repo, and Replit
+> is hosting only — currently not deployed at all.
+>
+> What did not change is the part that matters: **judging agent output is not delegable.** Sections
+> 3 and 5 still describe the only work that cannot be automated away.
+>
+> Live status is in [`06-ROADMAP.md`](06-ROADMAP.md).
+
+
 **Owner:** Elie Al Chaer · **Started:** 2026-08-26 · **Product:** winprojects.ai
 
 The plan we abide by. It exists to answer three questions: *how much of my time*, *who does what*,

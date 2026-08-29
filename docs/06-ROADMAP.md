@@ -1,6 +1,6 @@
 # WinProjects — Build Status and Roadmap
 
-**Updated:** 2026-08-29 · Read with [`04-EXECUTION-PLAN.md`](04-EXECUTION-PLAN.md) (the why) and
+**Updated:** 2026-08-29 (second pass) · Read with [`04-EXECUTION-PLAN.md`](04-EXECUTION-PLAN.md) (the why) and
 [`05-TECH-DEBT.md`](05-TECH-DEBT.md) (what was deliberately deferred).
 
 Written milestone by milestone rather than prompt by prompt, because the original P0–P20 order
@@ -61,14 +61,40 @@ company name (R1).
 Against the two real files: 33/33 classified from the directory; 943 importable of 2,759 from the
 vendor master, 0 classified because no trade column exists.
 
+### M6b · Human editing, audited
+Every human-owned field on sixteen tables is editable through one endpoint,
+`PATCH /api/records/:table/:id`. Each edit writes an append-only `audit_event` with before, after,
+actor and timestamp. Identity, tenancy, gate-controlled state and agent bookkeeping are refused —
+a general edit endpoint is exactly the back door R4 forbids.
+
+Unchanged fields write nothing, so the ledger stays meaningful. If the edit lands but the audit row
+fails, the response says so rather than reporting success.
+
+**This is also the training corpus.** `draft` (what the agent proposed) joined to `audit_event`
+(what the human chose) joined to `approval` (what they accepted) is a supervised training set,
+captured as a by-product of normal work. See `05-TECH-DEBT.md` items 19–23.
+
+### M6c · Spreadsheet grid (built, not yet wired)
+A keyboard-first grid with the interaction model estimators already have: type to replace, F2 or
+double-click to edit in place, Enter down, Tab right, Shift+arrows to select a range, Ctrl+C/V
+round-tripping Excel's TSV clipboard, Ctrl+D fill down, Ctrl+Z undo, Delete to clear. Paste of a
+block issues one request per row, not per cell.
+
+Decision recorded in `05-TECH-DEBT.md`: **no embedded Google Sheet.** Data outside Supabase is data
+outside RLS and outside the ledger, which retires the product's central claim. The escape hatch is
+xlsx export and re-import with a diff, not a live link.
+
+**Component compiles and is complete; it is not yet attached to a screen.** That is the next step.
+
+
 ---
 
 ## Remaining
 
 | # | Milestone | What it delivers | Blocked on |
 |---|---|---|---|
-| **M6b** | Import review screen | Preview → assign trades → commit. 943 unclassified vendors need trades, and that is a human act | — |
-| **M7** | Scope of Work | Create and edit scope items, CSI structure, H2 lock. Currently only seeded data exists | — |
+| **M7** | **Scope of Work grid** | Wire the grid to `scope_item`: add, edit, CSI structure, H2 lock. The first screen that is genuinely a workspace | — |
+| **M7b** | Import review screen | Preview → assign trades → commit. 943 unclassified vendors need trades, and that is a human act | — |
 | **M8** | **Quote extraction (P7)** | Line items, commercial terms, and **exclusions** with page-level citations | **Elie's judgement on output quality** |
 | **M9** | Normalisation (P8) | Quote lines mapped onto the scope baseline; ambiguous flagged, never forced | M8 |
 | **M10** | Add-back estimation (P9) | Costs exclusions back in: comparable bids → benchmark → TBC. Never a guess | M9 |
@@ -88,7 +114,7 @@ vendor master, 0 classified because no trade column exists.
 
 ## What is blocking what
 
-**Nothing blocks M6b, M7, M19 or M20** — those can proceed at any time.
+**Nothing blocks M7, M7b, M19 or M20** — those can proceed at any time.
 
 **M8 is the hinge.** Everything from M9 to M13 sits behind extraction working well enough to trust,
 and "well enough" is a judgement only Elie can make: did it find every exclusion, including the one

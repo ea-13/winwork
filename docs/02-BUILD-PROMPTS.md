@@ -1,5 +1,19 @@
 # WinProjects — Build Prompts
 
+> **Status note (2026-08-29).** These prompts were written to be pasted into Replit Agent. That is
+> not how the build happened: it was written directly against this repo instead, and the sequence
+> diverged in three places that matter.
+>
+> - **P2** assumed one package per project. A GC buys by trade, so packages are per CSI division.
+> - **P5** capped uploads at 25MB, sized for a quote PDF. A stamped plan set is far larger, and
+>   uploads now go directly to storage rather than through the API.
+> - **P13** asked for Division Experts as knowledge rows. The intended mechanism is retrieval plus a
+>   specialist prompt, since Claude models cannot be fine-tuned.
+>
+> **Read [`06-ROADMAP.md`](06-ROADMAP.md) for what is actually built.** This file remains the record
+> of the original intent, and the verification criteria in it are still the bar each area must meet.
+
+
 Paste these into **Replit Agent one at a time, in order.** Do not batch them. After each, run the
 stated verification before moving on — a broken foundation compounds, and Replit will happily build
 on top of something that does not work.

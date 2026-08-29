@@ -116,7 +116,7 @@ export function PackagePage() {
           dragging ? 'border-slate-900 bg-white' : 'border-slate-300 text-slate-500'
         }`}
       >
-        {progress ?? 'Drop sub bids here — or click to choose. PDF, XLSX, DOCX up to 50MB.'}
+        {progress ?? 'Drop sub bids here — or click to choose. PDF, XLSX, DOCX.'}
       </div>
       <input
         ref={picker}

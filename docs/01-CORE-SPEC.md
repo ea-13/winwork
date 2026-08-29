@@ -492,3 +492,30 @@ The governance model (R1–R6) is ported **by concept** from the existing AGC sp
 provenance, the append-only approval ledger, the no-send job guard. Those three ideas are what make
 this safe to sell to a general contractor. They are cheap to implement now and expensive to
 retrofit later.
+
+---
+
+## 10. Schema changes since v1.0
+
+The data model in section 4 is the design. What is actually deployed has grown, and every change is
+recorded in `supabase/migrations/`. Deltas worth knowing when reading section 4:
+
+| Change | Migration | Why |
+|---|---|---|
+| `package_scope` gained `tenant_id` | 0001 | The spec listing omitted it, which would have left one table outside the RLS policy |
+| `division_expert`, `gap_pattern`, `lead_time` have **no** `tenant_id` | 0001 | Shared CSI reference data, identical for every tenant. RLS is enabled with a read-only policy |
+| `draft`/`approval`/`audit_event` UPDATE is statement-level, DELETE is row-level | 0002 | Statement-level DELETE fired on the zero-row cascade from `delete from tenant`, making tenant deletion impossible |
+| `quote.subcontractor_id` is nullable; `status`, `source_filename`, `source_size_bytes`, `uploaded_at`, `uploaded_by` added | 0003 | A quote row exists from upload, before extraction knows which bidder sent it. R1: unknown stays unknown |
+| `job` table | 0003 | Long agent runs must not sit behind an HTTP handler. `job_type` carries a check constraint refusing send-shaped work (R3) |
+| `claim_job()` function | 0004 | Atomic leasing needs `FOR UPDATE SKIP LOCKED`, which PostgREST cannot express |
+| `project_document` table | 0006 | Drawings, specs and addenda belong to the project and arrive before any package exists |
+| `work_package` gained `lead_division`, `description`, `budget_amount`, `allowance_amount`, `contingency_amount` | 0006 | A GC buys by trade, and the buyout log measures against budget with allowances and contingency |
+| `subcontractor` gained `vendor_code`, `contact_phone`, address fields, `union_status`, `import_batch` | 0007 | Real sub lists carry these; `raw_row` keeps the original verbatim |
+| `import_batch` table | 0007 | So a bad import can be identified and undone |
+
+### Tenancy resolution
+
+Section 4 says policies compare `tenant_id` against "the `tenant_id` claim in the JWT". The
+implementation is `public.current_tenant_id()`, which reads `app_metadata.tenant_id` from the
+request JWT and falls back to an `app_user` lookup by `auth.uid()`. `app_metadata` is writable only
+by `service_role`, so a user cannot grant themselves a tenant or a role.

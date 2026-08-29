@@ -165,7 +165,7 @@ export function ProjectPage() {
               dragging ? 'border-slate-900 bg-white' : 'border-slate-300 text-slate-500'
             }`}
           >
-            {progress ?? 'Drop drawings, specs or addenda here — or click to choose. Up to 50MB each.'}
+            {progress ?? 'Drop drawings, specs or addenda here — or click to choose. Large plan sets are fine.'}
           </div>
           <input
             ref={picker}

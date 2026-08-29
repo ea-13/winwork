@@ -9,12 +9,17 @@ const QUOTE_BUCKET = 'quote-documents';
 const PROJECT_BUCKET = 'project-documents';
 
 /**
- * 50MB, which is the ceiling Supabase Storage allows on the free plan — not a
- * number we chose. A full stamped plan set runs well past it; raising it needs
- * Supabase Pro, and files that large should upload straight to storage with a
- * signed URL rather than being buffered here in server memory.
+ * Two different limits, because there are two different upload paths.
+ *
+ * MAX_MULTIPART_BYTES bounds the legacy multipart route, which buffers the
+ * whole file in this process's memory. That is a container-memory limit, not a
+ * storage limit, and raising it is how a small instance falls over.
+ *
+ * BUCKET_LIMIT_BYTES is what Storage will accept. The browser uploads there
+ * directly with a signed URL, so a plan set never passes through here at all.
  */
-const MAX_BYTES = 50 * 1024 * 1024;
+const MAX_MULTIPART_BYTES = 50 * 1024 * 1024;
+const BUCKET_LIMIT_BYTES = 5 * 1024 * 1024 * 1024;
 
 const QUOTE_TYPES = new Map<string, string>([
   ['.pdf', 'application/pdf'],
@@ -38,7 +43,7 @@ const PROJECT_TYPES = new Map<string, string>([
 function makeUploader(allowed: Map<string, string>) {
   return multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: MAX_BYTES, files: 20 },
+    limits: { fileSize: MAX_MULTIPART_BYTES, files: 20 },
     fileFilter: (_req, file, callback) => {
       const extension = extname(file.originalname).toLowerCase();
       if (allowed.has(extension)) {
@@ -72,8 +77,8 @@ function handleUpload(allowed: Map<string, string>) {
         if (error.code === 'LIMIT_FILE_SIZE') {
           res.status(413).json({
             error:
-              `That file is larger than the ${MAX_BYTES / 1024 / 1024}MB limit, which is ` +
-              'the maximum Supabase Storage allows on this plan.',
+              `That file is larger than the ${MAX_MULTIPART_BYTES / 1024 / 1024}MB limit for ` +
+              'this upload path. Large files upload directly to storage instead.',
           });
           return;
         }
@@ -95,9 +100,15 @@ async function ensureBucket(name: string): Promise<void> {
   if (readyBuckets.has(name)) return;
   const { data } = await supabaseAdmin.storage.getBucket(name);
   if (!data) {
-    await supabaseAdmin.storage.createBucket(name, { public: false, fileSizeLimit: MAX_BYTES });
-  } else if ((data.file_size_limit ?? 0) < MAX_BYTES) {
-    await supabaseAdmin.storage.updateBucket(name, { public: false, fileSizeLimit: MAX_BYTES });
+    await supabaseAdmin.storage.createBucket(name, {
+      public: false,
+      fileSizeLimit: BUCKET_LIMIT_BYTES,
+    });
+  } else if ((data.file_size_limit ?? 0) < BUCKET_LIMIT_BYTES) {
+    await supabaseAdmin.storage.updateBucket(name, {
+      public: false,
+      fileSizeLimit: BUCKET_LIMIT_BYTES,
+    });
   }
   readyBuckets.add(name);
 }
