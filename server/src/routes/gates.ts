@@ -8,23 +8,26 @@ import { supabaseForUser } from '../lib/supabase.js';
  * not after a retry, not under autopilot (R4). Each crossing is attributed and
  * justified, and lands one append-only approval row.
  *
- * Known limitation: the approval row and the state change it authorises are two
- * statements, not one transaction, because supabase-js cannot span them. The
- * approval is written first, so the failure mode is an approval recording an
- * attempt that did not land — visible and honest — rather than a state change
- * nobody authorised. P19 (provenance and the approval ledger) should move each
- * gate into a single Postgres function and make it atomic.
+ * Each gate is a single Postgres function (migration 0008), so the approval and
+ * the state change it authorises are one transaction. They used to be two
+ * statements, which meant a failure between them could leave an approval for
+ * something that did not happen. The ledger is the product's integrity claim to
+ * a GC; it does not get an asterisk.
+ *
+ * The functions are SECURITY INVOKER, so RLS still decides which rows the
+ * caller may touch. A gate is not a way around tenancy.
  */
 export const gatesRouter = Router();
 
-type GateHandler = (
-  db: ReturnType<typeof supabaseForUser>,
-  req: Request,
-  tenantId: string,
-  userId: string,
-) => Promise<{ affected: number } | { error: string; status?: number }>;
+type Params = Record<string, unknown>;
 
-function gate(path: string, name: Gate, roles: Role[], handler: GateHandler) {
+function gate(
+  path: string,
+  name: Gate,
+  roles: Role[],
+  fn: string,
+  buildArgs: (body: Params, rationale: string, actorRole: string) => Params | { error: string },
+) {
   gatesRouter.post(path, requireRole(...roles), async (req: Request, res: Response) => {
     const auth = req.auth;
     if (!auth) {
@@ -35,35 +38,29 @@ function gate(path: string, name: Gate, roles: Role[], handler: GateHandler) {
     const rationale = readRationale(req, res);
     if (rationale === null) return;
 
-    const db = supabaseForUser(auth.token);
-
     // The role that actually authorised this crossing, for the ledger.
-    const actorRole = roles.find((role) => auth.roles.includes(role)) ?? auth.roles[0] ?? null;
+    const actorRole = roles.find((role) => auth.roles.includes(role)) ?? auth.roles[0] ?? '';
 
-    const { data: approval, error: approvalError } = await db
-      .from('approval')
-      .insert({
-        tenant_id: auth.tenantId,
-        gate: name,
-        actor_id: auth.userId,
-        actor_role: actorRole,
-        rationale,
-      })
-      .select('id')
-      .single();
-
-    if (approvalError || !approval) {
-      res.status(500).json({ error: approvalError?.message ?? 'Could not record the approval' });
+    const args = buildArgs((req.body ?? {}) as Params, rationale, actorRole);
+    if ('error' in args && typeof args.error === 'string') {
+      res.status(400).json({ error: args.error });
       return;
     }
 
-    const result = await handler(db, req, auth.tenantId, auth.userId);
-    if ('error' in result) {
-      res.status(result.status ?? 400).json({ error: result.error });
+    const { data, error } = await supabaseForUser(auth.token).rpc(fn, args);
+
+    if (error) {
+      // 22023 is the rationale check inside the function.
+      res.status(error.code === '22023' ? 400 : 500).json({ error: error.message });
       return;
     }
 
-    const body: GateResponse = { gate: name, approvalId: approval.id, affected: result.affected };
+    const result = data as { approvalId: string; affected: number };
+    const body: GateResponse = {
+      gate: name,
+      approvalId: result.approvalId,
+      affected: result.affected,
+    };
     res.json(body);
   });
 }
@@ -72,86 +69,39 @@ const ids = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
 // H2 · Scope of Work locked — EST
-gate('/h2/scope-lock', 'H2', ['EST'], async (db, req, _tenantId, userId) => {
-  const scopeItemIds = ids((req.body as Record<string, unknown>)?.scopeItemIds);
-  if (scopeItemIds.length === 0) {
-    return { error: 'scopeItemIds must be a non-empty array' };
-  }
-
-  const { data, error } = await db
-    .from('scope_item')
-    .update({ is_locked: true, locked_by: userId, locked_at: new Date().toISOString() })
-    .in('id', scopeItemIds)
-    .select('id');
-
-  if (error) return { error: error.message, status: 500 };
-  return { affected: data?.length ?? 0 };
+gate('/h2/scope-lock', 'H2', ['EST'], 'gate_h2_scope_lock', (body, rationale, actorRole) => {
+  const scopeItems = ids(body.scopeItemIds);
+  if (scopeItems.length === 0) return { error: 'scopeItemIds must be a non-empty array' };
+  return { p_actor_role: actorRole, p_rationale: rationale, p_scope_items: scopeItems };
 });
 
 // H3 · Work package approved — BC
-gate('/h3/package-approve', 'H3', ['BC'], async (db, req, _tenantId, userId) => {
-  const packageId = (req.body as Record<string, unknown>)?.packageId;
-  if (typeof packageId !== 'string') return { error: 'packageId is required' };
-
-  const { data, error } = await db
-    .from('work_package')
-    .update({ status: 'APPROVED', approved_by: userId, approved_at: new Date().toISOString() })
-    .eq('id', packageId)
-    .select('id');
-
-  if (error) return { error: error.message, status: 500 };
-  return { affected: data?.length ?? 0 };
+gate('/h3/package-approve', 'H3', ['BC'], 'gate_h3_package_approve', (body, rationale, actorRole) => {
+  if (typeof body.packageId !== 'string') return { error: 'packageId is required' };
+  return { p_actor_role: actorRole, p_rationale: rationale, p_package: body.packageId };
 });
 
 // H4 · Bidder list approved — BC
-gate('/h4/bidder-list-approve', 'H4', ['BC'], async (db, req, _tenantId, userId) => {
-  const packageId = (req.body as Record<string, unknown>)?.packageId;
-  if (typeof packageId !== 'string') return { error: 'packageId is required' };
-
-  const { data, error } = await db
-    .from('package_bidder')
-    .update({ list_approved_by: userId, list_approved_at: new Date().toISOString() })
-    .eq('package_id', packageId)
-    .select('id');
-
-  if (error) return { error: error.message, status: 500 };
-  return { affected: data?.length ?? 0 };
+gate('/h4/bidder-list-approve', 'H4', ['BC'], 'gate_h4_bidder_list_approve', (body, rationale, actorRole) => {
+  if (typeof body.packageId !== 'string') return { error: 'packageId is required' };
+  return { p_actor_role: actorRole, p_rationale: rationale, p_package: body.packageId };
 });
 
 // H5 · Clarifications released — EST. Drafted only: there is no send (R3).
-gate('/h5/clarifications', 'H5', ['EST'], async (db, req, _tenantId, userId) => {
-  const packageId = (req.body as Record<string, unknown>)?.packageId;
-  if (typeof packageId !== 'string') return { error: 'packageId is required' };
-
-  const { data, error } = await db
-    .from('solicitation_draft')
-    .update({ approved_by: userId, approved_at: new Date().toISOString() })
-    .eq('package_id', packageId)
-    .select('id');
-
-  if (error) return { error: error.message, status: 500 };
-  return { affected: data?.length ?? 0 };
+gate('/h5/clarifications', 'H5', ['EST'], 'gate_h5_clarifications', (body, rationale, actorRole) => {
+  if (typeof body.packageId !== 'string') return { error: 'packageId is required' };
+  return { p_actor_role: actorRole, p_rationale: rationale, p_package: body.packageId };
 });
 
 // H6 · Bidder selected — EST. Nothing is notified; a selection is a record.
-gate('/h6/selection', 'H6', ['EST'], async (db, req, tenantId, userId) => {
-  const body = (req.body as Record<string, unknown>) ?? {};
-  const { packageId, quoteId, rationale } = body;
-  if (typeof packageId !== 'string' || typeof quoteId !== 'string') {
+gate('/h6/selection', 'H6', ['EST'], 'gate_h6_selection', (body, rationale, actorRole) => {
+  if (typeof body.packageId !== 'string' || typeof body.quoteId !== 'string') {
     return { error: 'packageId and quoteId are required' };
   }
-
-  const { data, error } = await db
-    .from('selection')
-    .insert({
-      tenant_id: tenantId,
-      package_id: packageId,
-      quote_id: quoteId,
-      selected_by: userId,
-      rationale: String(rationale).trim(),
-    })
-    .select('id');
-
-  if (error) return { error: error.message, status: 500 };
-  return { affected: data?.length ?? 0 };
+  return {
+    p_actor_role: actorRole,
+    p_rationale: rationale,
+    p_package: body.packageId,
+    p_quote: body.quoteId,
+  };
 });

@@ -12,14 +12,15 @@
     "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "npm run dev --workspace server",
     "dev:client": "npm run dev --workspace client",
-    "build": "npm run build --workspace client && npm run build --workspace server",
+    "build": "npm run build --workspace client && node scripts/check-bundle.mjs && npm run build --workspace server",
     "start": "npm run start --workspace server",
     "seed": "npm run seed --workspace server",
     "typecheck": "tsc -b --pretty",
     "migrate": "node scripts/migrate.mjs",
     "verify:rls": "node scripts/verify-rls.mjs",
     "verify:app": "node scripts/verify-app.mjs",
-    "verify": "npm run verify:rls && npm run verify:app"
+    "verify": "npm run verify:rls && npm run verify:app && npm run verify:isolation",
+    "verify:isolation": "node scripts/verify-isolation.mjs"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",

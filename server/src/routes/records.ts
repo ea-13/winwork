@@ -118,3 +118,56 @@ recordsRouter.get('/records/:table/:id/history', async (req, res) => {
   }
   res.json(data ?? []);
 });
+
+/**
+ * P19 · Where a value came from.
+ *
+ * Every agent-derived field can answer "where did this number come from?" in
+ * one request: the proposal, its source document and page, its confidence, and
+ * the model plus prompt version that produced it — alongside every human edit
+ * since. That answer being one click away is what makes the product defensible
+ * when a GC asks.
+ */
+recordsRouter.get('/records/:table/:id/provenance', async (req, res) => {
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+  const { table, id } = req.params;
+
+  const [{ data: drafts }, { data: history }] = await Promise.all([
+    db
+      .from('draft')
+      .select('id, agent_run_id, field, proposed_value, source_file_id, source_location, confidence, fill_tag, created_at')
+      .eq('target_table', table)
+      .eq('target_id', id)
+      .order('created_at', { ascending: false }),
+    db
+      .from('audit_event')
+      .select('id, actor_id, action, before, after, at')
+      .eq('table_name', table)
+      .eq('record_id', id)
+      .order('at', { ascending: false }),
+  ]);
+
+  const runIds = [...new Set((drafts ?? []).map((draft) => draft.agent_run_id as string))];
+  const { data: runs } = runIds.length
+    ? await db
+        .from('agent_run')
+        .select('id, agent_type, model, prompt_version, started_at')
+        .in('id', runIds)
+    : { data: [] as Record<string, unknown>[] };
+
+  const runById = new Map((runs ?? []).map((run) => [run.id as string, run]));
+
+  res.json({
+    proposals: (drafts ?? []).map((draft) => ({
+      ...draft,
+      run: runById.get(draft.agent_run_id as string) ?? null,
+    })),
+    history: history ?? [],
+  });
+});

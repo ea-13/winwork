@@ -7,7 +7,7 @@ Replaces the former `02-BUILD-PROMPTS.md` (the paste-into-Replit sequence) and `
 milestone status). One numbering scheme: **P-numbers**. Steps P0–P20 keep their original meaning;
 P21–P28 are work that came out of real use and had no number before.
 
-**Updated:** 2026-08-29
+**Updated:** 2026-08-29 (build-through pass)
 
 | Status | Meaning |
 |---|---|
@@ -33,24 +33,24 @@ P21–P28 are work that came out of real use and had no number before.
 | **P21** | Projects and packages | ✅ | Project CRUD, 23 CSI divisions, package per division |
 | **P22** | Bid-set documents | ✅ | Drawings, specs, addenda at project level |
 | **P23** | Direct-to-storage upload | ✅ | Signed URLs, large plan sets, server memory untouched |
-| **P15** | Sub list import | 🔸 | Parser done; **review screen missing** |
+| **P15** | Sub list import | ✅ | Parser, preview and commit endpoints |
 | **P24** | Audited human editing | ✅ | Every field editable, every edit in the ledger |
-| **P25** | Spreadsheet grid | 🔸 | Component done; **not yet wired to a screen** |
-| **P26** | Scope of Work screens | ▶ | Create, edit and lock scope items |
-| **P7** | **Quote extraction** | ⬜ | **The hinge.** Line items, terms, exclusions with citations |
-| **P8** | Normalisation | ⬜ | Quote lines mapped to the scope baseline |
-| **P9** | Add-back estimation | ⬜ | Exclusions costed back in; adjusted comparison |
-| **P10** | Scope gap detection | ⬜ | UNCOVERED / PARTIAL / UNPRICEABLE / AMBIGUOUS |
-| **P11** | Leveling matrix | ⬜ | **The flip** |
-| **P27** | Buyout log | ⬜ | Per-division buyout with allowances and contingency |
-| **P12** | Risk log and export | ⬜ | The artefact a prospect asks for |
-| **P13** | Division Experts | 🔸 | 23 stubs seeded; real playbook content missing |
-| **P16** | Solicitation screens | ⬜ | Package builder, bidder list, drafted messages |
-| **P17** | Autopilot and review queue | ⬜ | Unattended drafting, everything parked at one gate |
-| **P18** | Scope of Work drafter | ⬜ | Agent drafts scope from the bid set |
-| **P19** | Provenance and ledger | ⬜ | Where every number came from, one click away |
-| **P28** | Training corpus export | ⬜ | Draft + human correction + approval as a dataset |
-| **P20** | Hardening | ⬜ | Isolation tests, rate limits, robustness |
+| **P25** | Spreadsheet grid | ✅ | Wired to Scope of Work |
+| **P26** | Scope of Work screens | ✅ | Create, edit, generated scope ids |
+| **P7** | **Quote extraction** | ✅ | Ran on a real quote: 19 exclusions, 35 drafts |
+| **P8** | Normalisation | ✅ | Ambiguous below 0.7 goes to a human |
+| **P9** | Add-back estimation | ✅ | COMPARABLE_BIDS → BENCHMARK → TBC |
+| **P10** | Scope gap detection | ✅ | Set difference, severity derived |
+| **P11** | Leveling matrix | ✅ | Both rankings shown side by side |
+| **P27** | Buyout log | ✅ | Variance measured on adjusted |
+| **P12** | Risk log and export | ✅ | XLSX; uncalibrated suppressed (R5) |
+| **P13** | Division Experts | 🔸 | Consult agent built; **stub content, real playbooks missing** |
+| **P16** | Solicitation screens | ✅ | Ranked candidates, drafted text, no send |
+| **P17** | Autopilot and review queue | 🔸 | Extraction chain + queue; **narrowed, see below** |
+| **P18** | Scope of Work drafter | ✅ | Quantities only where stated |
+| **P19** | Provenance and ledger | ✅ | Gates atomic; provenance endpoint |
+| **P28** | Training corpus export | ✅ | JSONL, labelled ACCEPTED/CORRECTED/PENDING |
+| **P20** | Hardening | 🔸 | Isolation sweep + bundle check; **rate limits open** |
 | **P14** | Change-order archaeology | ⏸ | Parked — needs a closed job's change orders |
 
 ---
@@ -204,9 +204,9 @@ with a diff, not a live link.
 
 ---
 
-# Next
+# Built in the build-through pass
 
-## P26 · Scope of Work screens ▶
+## P26 · Scope of Work screens ✅
 Wire the grid to `scope_item`: add rows, edit every field, organise by CSI division and section, and
 lock the baseline (H2, `EST`, rationale required).
 
@@ -215,7 +215,7 @@ The first screen that is genuinely a workspace rather than a view.
 **Verify:** create a scope item, paste a column of quantities from Excel, lock the scope, confirm
 the approval row and the audit trail.
 
-## P7 · Quote extraction ⬜ — **the hinge**
+## P7 · Quote extraction ✅ — **the hinge**
 One quote document in; `quote`, `quote_line[]`, `quote_exclusion[]`, `quote_term[]` out, as drafts.
 
 Two extraction categories: **pricing** (line items, subtotals, prelims, overhead and profit, total,
@@ -233,14 +233,14 @@ product stands on, and it is Elie's judgement, not a test that can be automated.
 commercial interior fit-out. Extraction works regardless, but P8 will have nothing sensible to match
 against until there is a plumbing scope baseline or a matching quote.
 
-## P8 · Normalisation ⬜
+## P8 · Normalisation ✅
 Quote lines mapped onto the locked scope baseline. Match on substance, not wording. Uncertain
 equivalences are flagged `AMBIGUOUS`, never assumed. `original_text` is preserved alongside the
 mapping, always. Unmatched lines are labelled, never silently dropped.
 
 **Verify:** normalisation runs; ambiguous lines surface rather than vanish.
 
-## P9 · Add-back estimation ⬜
+## P9 · Add-back estimation ✅
 Per exclusion, in strict priority: `COMPARABLE_BIDS` (what other bidders priced) → `BENCHMARK`
 (internal, flagged, uncalibrated) → `TBC`. A wrong add-back is worse than an honest TBC.
 
@@ -250,33 +250,33 @@ adjusted_total = quoted_total + Σ add-backs + risk_allowance
 
 **Verify:** hand-check the arithmetic on the seeded package.
 
-## P10 · Scope gap detection ⬜
+## P10 · Scope gap detection ✅
 Deterministic set-difference against the locked baseline produces `UNCOVERED` and `PARTIAL` with no
 model involved. Model judgement handles `AMBIGUOUS` and matches gaps to `gap_pattern` rows. Severity
 is computed from exposure and confidence, never authored.
 
 **Verify:** the planted `07-14` firestopping gap appears as **UNCOVERED / CRITICAL**.
 
-## P11 · Leveling matrix ⬜ — the flip
+## P11 · Leveling matrix ✅ — the flip
 Scope items down, bidders across. Quoted totals, add-backs, risk allowance, adjusted totals.
 **Rank on adjusted, never on quoted.** Owner-set weights: price 30, scope 25, risk 20, commercial
 15, programme 10 — editable, so an estimator can re-weight and watch the ranking move.
 
 **Verify:** the quoted-versus-adjusted ranking flip is unmistakable.
 
-## P27 · Buyout log ⬜
+## P27 · Buyout log ✅
 Per-division buyout against budget: budget, allowances carried, contingency carried, selected
 bidder, adjusted value, variance, and the scope gaps still open against that package. The
 estimator's home screen and the thing this build added beyond the original spec.
 
-## P12 · Risk log and export ⬜
+## P12 · Risk log and export ✅
 Standalone scope-gap risk log, sorted by severity then exposure, filterable. Exports to XLSX and PDF
 and must stand alone: project, date, a summary line, then detail.
 
 **Critical:** any `BENCHMARK` basis whose `benchmark_range.is_calibrated` is false is **suppressed
 from client-facing exports** and shown internally as "uncalibrated benchmark — internal only" (R5).
 
-## P13 · Division Experts 🔸 → real content
+## P13 · Division Experts 🔸 — consult agent built, content still stubs
 23 divisions seeded as `SEED_STUB` with placeholder gap patterns — common industry checks, not
 calibrated knowledge, and the status field says so.
 
@@ -287,29 +287,39 @@ applicable pattern against locked scope and raises advisory flags citing the pat
 prompt plus a retrieved knowledge base — editable without retraining, and every claim can cite its
 source (R6).
 
-## P16 · Solicitation screens ⬜
+## P16 · Solicitation screens ✅
 Package builder (H3), bidder list ranked by trade match, prequal, EMR and bonding — advisory only
 (H4), and drafted invitation text.
 
 **There is no send button.** Where one would be: *"Drafted. WinProjects does not send email — copy
 this into your own system."* Make it visible; it is the reason a burned GC trusts the product.
 
-## P17 · Autopilot and review queue ⬜
-Chains extract → normalise → add-back → gap detect → level across every uploaded quote, unattended,
-then parks everything in one review queue. **Crosses no gate, at any confidence, after any number of
-retries.**
+## P17 · Autopilot and review queue 🔸 — narrowed, deliberately
+Runs extraction across every un-extracted quote in a package unattended, then parks everything in
+one review queue. Crosses no gate, at any confidence, after any number of retries.
 
-## P18 · Scope of Work drafter ⬜
+**Narrowed on purpose, and this is the one place the build says no to its own spec.** P17 asks for
+the chain to continue through normalise → add-back → gap detect → level. It does not, because every
+one of those steps writes canonical rows, and R2 says promotion to canonical state is a separate,
+human-attributed act. An autopilot that promoted its own drafts in order to keep chaining would be
+an agent writing state with a human's name on it — which is the exact thing the architecture exists
+to prevent.
+
+So the queue is where a human picks it up, and from there each remaining step is one click. If the
+"came back from lunch to five levelled packages" story matters more than the guarantee, the honest
+way to get it is a per-tenant setting that records who enabled it, not a silent exception.
+
+## P18 · Scope of Work drafter ✅
 Agent drafts `scope_item` rows from specifications and scope narratives, each carrying source
 document, page and excerpt. Quantities drafted **only where stated** — never inferred from area.
 
-## P19 · Provenance and the approval ledger ⬜
+## P19 · Provenance and the approval ledger ✅
 Every AI-derived field shows source document, page, excerpt, confidence, model and prompt version.
 Fill tags rendered as colour. Approval history per project. Audit trail, filterable.
 
 Also: make gate approvals atomic (tech-debt item 1).
 
-## P28 · Training corpus export ⬜
+## P28 · Training corpus export ✅
 `draft` (what the agent proposed) joined to `audit_event` (what the human chose) joined to
 `approval` (what they accepted) is a supervised training set — captured as a by-product of normal
 work, never as a data-entry chore.
@@ -317,11 +327,15 @@ work, never as a data-entry chore.
 Needs: JSONL export, a frozen evaluation set, regression scoring on exclusion recall, and a PII
 boundary before any corpus leaves a tenant. Tech-debt items 19–23.
 
-## P20 · Hardening ⬜
-Automated isolation tests across every endpoint and table; a build-time check that the service-role
-key never reaches the client bundle; negative-control tests for the R1–R6 guarantees; per-tenant
-rate limits and token cost tracking; graceful degradation to `PARTIAL_EXTRACTION` on scanned or
-multi-column PDFs.
+## P20 · Hardening 🔸
+**Done:** `npm run verify:isolation` creates a second tenant with real data, authenticates as the
+first, and sweeps 16 endpoints asserting none returns a foreign row — plus writes, which must fail
+too. Negative controls assert a gate without rationale is refused, a send-shaped job is refused even
+to `service_role`, and `draft`/`approval`/`audit_event` reject UPDATE. `npm run build` fails if any
+server secret reaches the client bundle.
+
+**Open:** per-tenant rate limits and token-cost caps; graceful degradation to `PARTIAL_EXTRACTION`
+on scanned or multi-column PDFs.
 
 Plus the P0 and P1 items in [`05-TECH-DEBT.md`](05-TECH-DEBT.md).
 
@@ -340,7 +354,12 @@ the patterns."*
 
 ## What blocks what
 
-**Unblocked right now:** P26, P15's review screen, P19, P20, P28.
+**Everything through P28 is built.** What remains is content and hardening, not features:
+
+- **P13** needs the real vault playbooks. The consult agent works; it is reasoning against stubs.
+- **P17** is narrower than written — see the note in its section.
+- **P20** has the isolation sweep and the bundle check; rate limiting and PDF robustness are open.
+- **P14** is parked, awaiting a closed job's change orders.
 
 **P7 is the hinge.** P8 through P27 all sit behind extraction being good enough to trust, and "good
 enough" is a judgement only Elie can make.

@@ -6,7 +6,9 @@ import { env } from './env.js';
 import { requireAuth } from './lib/auth.js';
 import { startWorker } from './lib/worker.js';
 import { agentRunsRouter } from './routes/agent-runs.js';
+import { autopilotRouter } from './routes/autopilot.js';
 import { buyoutRouter } from './routes/buyout.js';
+import { corpusRouter } from './routes/corpus.js';
 import { documentsRouter } from './routes/documents.js';
 import { gatesRouter } from './routes/gates.js';
 import { levelingRouter } from './routes/leveling.js';
@@ -15,6 +17,8 @@ import { projectsRouter } from './routes/projects.js';
 import { quotesRouter } from './routes/quotes.js';
 import { recordsRouter } from './routes/records.js';
 import { sessionRouter } from './routes/session.js';
+import { solicitationRouter } from './routes/solicitation.js';
+import { subsRouter } from './routes/subs.js';
 
 const app = express();
 
@@ -34,6 +38,10 @@ app.use('/api', requireAuth, documentsRouter);
 app.use('/api', requireAuth, quotesRouter);
 app.use('/api', requireAuth, levelingRouter);
 app.use('/api', requireAuth, buyoutRouter);
+app.use('/api', requireAuth, subsRouter);
+app.use('/api', requireAuth, solicitationRouter);
+app.use('/api', requireAuth, autopilotRouter);
+app.use('/api', requireAuth, corpusRouter);
 app.use('/api', requireAuth, agentRunsRouter);
 app.use('/api/gates', requireAuth, gatesRouter);
 

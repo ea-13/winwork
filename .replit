@@ -1,0 +1,28 @@
+# Replit configuration, in the repo so deployment is reviewable and reproducible
+# rather than living only in the Replit UI.
+#
+# Secrets are set in Replit's own Secrets pane, never here:
+#   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
+#   ANTHROPIC_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, NODE_ENV
+#
+# DATABASE_URL is deliberately NOT needed here. Migrations run from a developer
+# machine; the app reaches Postgres through PostgREST with the keys above.
+
+run = "npm run start"
+entrypoint = "server/src/index.ts"
+modules = ["nodejs-22"]
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+build = ["sh", "-c", "npm install && npm run build"]
+run = ["sh", "-c", "npm run start"]
+deploymentTarget = "cloudrun"
+
+[[ports]]
+localPort = 3001
+externalPort = 80
+
+[env]
+NODE_ENV = "production"

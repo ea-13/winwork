@@ -2,6 +2,8 @@ import type { AgentContext } from './agent-run.js';
 import { AgentRun } from './agent-run.js';
 import { runDemoStream } from '../agents/demo-stream.js';
 import { runQuoteExtraction } from '../agents/extract-quote.js';
+import { runDivisionConsult } from '../agents/division-consult.js';
+import { runScopeDrafter } from '../agents/draft-scope.js';
 import { runNormalisation } from '../agents/normalise-quote.js';
 import { supabaseAdmin } from './supabase.js';
 
@@ -16,6 +18,8 @@ const AGENTS: Record<string, Agent> = {
   demo_stream: (ctx) => runDemoStream(ctx),
   extract_quote: (ctx, payload) => runQuoteExtraction(ctx, payload),
   normalise_quote: (ctx, payload) => runNormalisation(ctx, payload),
+  division_consult: (ctx, payload) => runDivisionConsult(ctx, payload),
+  draft_scope: (ctx, payload) => runScopeDrafter(ctx, payload),
 };
 
 /**
