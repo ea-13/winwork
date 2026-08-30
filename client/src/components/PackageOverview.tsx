@@ -19,24 +19,22 @@ type Row = {
 };
 
 /**
- * Bids and levelling across every package, at project level.
+ * Bids across every package, at project level.
  *
- * These two steps used to require a package to be chosen first, and clicking
- * them without one bounced you back to the scope screen. That was wrong twice
- * over: it blocked a step for no reason, and it hid the only view that answers
- * "where is this whole job up to" — which is the question somebody actually has
- * when they open the app on a Tuesday morning.
+ * This step used to require a package to be chosen first, and clicking it
+ * without one bounced you back to the scope screen. That was wrong twice over:
+ * it blocked a step for no reason, and it hid the only view that answers "where
+ * is this whole job up to" — which is the question somebody actually has when
+ * they open the app on a Tuesday morning.
  *
- * So the project level is the summary and the package level is the detail. You
- * click a division to go in, exactly as you would open a tab in a workbook.
+ * Levelling used to live here too and now lives inside the buyout log, where it
+ * is the detail behind a summary line rather than a separate place to go.
  */
 export function PackageOverview({
   projectId,
-  mode,
   onError,
 }: {
   projectId: string;
-  mode: 'bids' | 'leveling';
   onError: (message: string | null) => void;
 }) {
   const [rows, setRows] = useState<Row[]>([]);
@@ -79,19 +77,18 @@ export function PackageOverview({
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[13px] font-semibold text-ink-900">
-            {mode === 'bids' ? 'Bids by package' : 'Levelling by package'}
-          </h2>
+          <h2 className="text-[13px] font-semibold text-ink-900">Bids by package</h2>
           <p className="text-xs text-ink-400">
             {withBids} of {rows.length} package{rows.length === 1 ? '' : 's'} has a bid. Click a
             division to open it.
           </p>
         </div>
-        {mode === 'leveling' && withBids > 0 && (
+        {withBids > 0 && (
           <button
             onClick={levelAll}
             disabled={busy}
             className="rounded-md border border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700 disabled:opacity-50"
+            title="Recomputes every package that has a bid. Deterministic arithmetic, no model."
           >
             {busy ? 'Computing…' : 'Level everything'}
           </button>
@@ -106,12 +103,6 @@ export function PackageOverview({
               <th className="px-3 py-2 text-center font-medium">Bids</th>
               <th className="px-3 py-2 font-medium">Leading</th>
               <th className="px-3 py-2 text-right font-medium">Adjusted</th>
-              {mode === 'leveling' && (
-                <>
-                  <th className="px-3 py-2 text-right font-medium">Budget</th>
-                  <th className="px-3 py-2 text-right font-medium">Variance</th>
-                </>
-              )}
               <th className="px-3 py-2 text-center font-medium">Gaps</th>
               <th className="px-3 py-2" />
             </tr>
@@ -120,7 +111,7 @@ export function PackageOverview({
             {rows.map((row) => (
               <tr
                 key={row.packageId}
-                onClick={() => navigate(`/packages/${row.packageId}?step=${mode}`)}
+                onClick={() => navigate(`/packages/${row.packageId}?step=bids`)}
                 className="cursor-pointer border-b border-ink-100 last:border-0 hover:bg-ink-50"
               >
                 <td className="px-3 py-2">
@@ -149,25 +140,6 @@ export function PackageOverview({
                 </td>
                 <td className="px-3 py-2 text-right text-ink-700">{money(row.adjustedTotal)}</td>
 
-                {mode === 'leveling' && (
-                  <>
-                    <td className="px-3 py-2 text-right text-ink-600">{money(row.budget)}</td>
-                    <td
-                      className={`px-3 py-2 text-right font-medium ${
-                        row.variance === null
-                          ? 'text-ink-300'
-                          : row.variance > 0
-                            ? 'text-red-700'
-                            : 'text-emerald-700'
-                      }`}
-                    >
-                      {row.variance === null
-                        ? '—'
-                        : `${row.variance > 0 ? '+' : ''}${money(row.variance)}`}
-                    </td>
-                  </>
-                )}
-
                 <td className="px-3 py-2 text-center">
                   {row.openGaps > 0 ? (
                     <span
@@ -189,7 +161,7 @@ export function PackageOverview({
 
             {rows.length === 0 && (
               <tr>
-                <td colSpan={mode === 'leveling' ? 8 : 6} className="px-4 py-6 text-sm text-ink-400">
+                <td colSpan={6} className="px-4 py-6 text-sm text-ink-400">
                   No packages yet. Put some scope into a package on the Scope step.
                 </td>
               </tr>

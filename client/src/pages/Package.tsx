@@ -22,7 +22,7 @@ type WorkPackage = {
 };
 
 /** The steps a package owns, plus scope which it shares with the project. */
-const STEPS: ChainStep[] = ['bids', 'leveling'];
+const STEPS: ChainStep[] = ['bids'];
 
 const isPackageStep = (value: string | null): value is ChainStep =>
   value !== null && (STEPS as string[]).includes(value);
@@ -273,13 +273,6 @@ export function PackagePage() {
             )}
           </div>
         </section>
-      )}
-
-      {step === 'leveling' && (
-        <div className="space-y-6">
-          <LevelingMatrix packageId={packageId} onError={setError} />
-          <BidTab packageId={packageId} onError={setError} />
-        </div>
       )}
 
     </Layout>

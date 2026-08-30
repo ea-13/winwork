@@ -12,19 +12,20 @@ export type ChainSummary = {
   gaps: { total: number; open: number; critical: number; assigned: number };
 };
 
-export type ChainStep = 'documents' | 'scope' | 'bids' | 'leveling' | 'buyout';
+export type ChainStep = 'documents' | 'scope' | 'bids' | 'buyout';
 
 /** Which steps live on the project, and which need a package chosen first. */
 // Bids and leveling exist at BOTH levels: a summary across packages on the
 // project, the detail inside one. Nothing is gated on choosing a package.
-const PROJECT_STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'leveling', 'buyout'];
+const PROJECT_STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'buyout'];
 
 const LABEL: Record<ChainStep, string> = {
   documents: 'Documents',
   scope: 'Scope & Packages',
   bids: 'Bids',
-  leveling: 'Leveling',
-  buyout: 'Buyout',
+  // Levelling lives inside the buyout log now — it is what you find when you
+  // open a package, not a separate place to go.
+  buyout: 'Buyout & Leveling',
 };
 
 /**
@@ -109,11 +110,9 @@ export function ChainNav({
               ? `${summary.bids.total - summary.bids.extracted} to extract`
               : null,
         };
-      case 'leveling':
-        return { count: String(summary.leveling.ranked), hint: null };
       case 'buyout':
         return {
-          count: '',
+          count: String(summary.leveling.ranked),
           hint:
             summary.gaps.open > 0
               ? `${summary.gaps.open} gap${summary.gaps.open === 1 ? '' : 's'} open`
@@ -123,7 +122,7 @@ export function ChainNav({
   };
 
   /** Steps a package page can render itself. */
-  const PACKAGE_STEPS: ChainStep[] = ['bids', 'leveling'];
+  const PACKAGE_STEPS: ChainStep[] = ['bids'];
 
   const go = (step: ChainStep) => {
     // Inside a package, bids and leveling stay inside it — clicking them should
@@ -140,7 +139,7 @@ export function ChainNav({
     else navigate(`/projects/${projectId}?step=${step}`);
   };
 
-  const steps: ChainStep[] = ['documents', 'scope', 'bids', 'leveling', 'buyout'];
+  const steps: ChainStep[] = ['documents', 'scope', 'bids', 'buyout'];
 
   return (
     <nav aria-label="Workflow" className="overflow-x-auto">
@@ -197,7 +196,7 @@ export function ChainNav({
 
       {packageId && (
         <p className="mt-1.5 text-xs text-slate-400">
-          Bids and leveling are per package.{' '}
+          Bids are per package.{' '}
           <Link to={`/projects/${projectId}?step=scope`} className="underline">
             Switch package
           </Link>

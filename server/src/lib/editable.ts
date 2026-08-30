@@ -78,7 +78,10 @@ export const EDITABLE: Record<string, readonly string[]> = {
 
   past_project: ['name', 'gc_name', 'contract_value', 'completed_at'],
 
-  change_order: ['co_number', 'amount', 'description', 'stated_reason', 'issued_at'],
+  change_order: ['co_number', 'amount', 'description', 'stated_reason', 'issued_at',
+    // The hindsight verdict itself moves through its own endpoint, which
+    // enforces that PREDICTED names the gap that predicted it.
+    'scope_item_id'],
 
   co_classification: ['classification', 'human_verdict', 'reasoning'],
 

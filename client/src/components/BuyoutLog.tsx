@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Grid, type GridColumn, type GridRow } from './Grid';
+import { BidTab } from './BidTab';
+import { LevelingMatrix } from './LevelingMatrix';
 import { apiGet, apiPatch, apiPost } from '../lib/api';
 import { money } from './Layout';
 
@@ -438,13 +440,20 @@ export function BuyoutLog({
         </p>
       )}
 
-      {/* Gaps hang below the grid rather than inside it. A gap is not a package,
-          and giving it a row in the same cell model would break every range
-          selection and every formula that counts packages. */}
+      {/* Each package opens into its own detail: the sub-by-sub comparison and
+          the gaps against it.
+
+          This is what merged Leveling into Buyout. They were two steps and one
+          question — the buyout log is the summary sheet, and levelling is what
+          you find when you open a line of it. Clicking the division header is
+          the same gesture as opening a tab in a workbook, which is what an
+          estimator is already doing in their head.
+
+          Gaps stay OUTSIDE the grid rather than becoming rows in it: a gap is
+          not a package, and giving it a row in the same cell model would break
+          every range selection and every formula that counts packages. */}
       <div className="space-y-2">
-        {rows
-          .filter((row) => row.gaps.length > 0)
-          .map((row) => (
+        {rows.map((row) => (
             <div key={row.packageId} className="rounded-xl border border-ink-200 bg-white">
               <button
                 onClick={() => toggle(row.packageId)}
@@ -454,8 +463,13 @@ export function BuyoutLog({
                   <span className="font-mono text-ink-400">{row.division ?? '—'}</span>{' '}
                   <span className="font-medium text-ink-900">{row.name}</span>
                   <span className="ml-2 text-ink-400">
-                    {row.gaps.length} gap{row.gaps.length === 1 ? '' : 's'}
+                    {row.bidderCount} bid{row.bidderCount === 1 ? '' : 's'}
                   </span>
+                  {row.gaps.length > 0 && (
+                    <span className="ml-2 text-ink-400">
+                      · {row.gaps.length} gap{row.gaps.length === 1 ? '' : 's'}
+                    </span>
+                  )}
                   {row.openGaps > 0 && (
                     <span
                       className={`ml-2 font-medium ${
@@ -465,20 +479,49 @@ export function BuyoutLog({
                       {row.openGaps} undecided
                     </span>
                   )}
+                  {row.selected && (
+                    <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+                      awarded
+                    </span>
+                  )}
                 </span>
                 <span className="text-xs text-ink-400">
-                  {expanded.has(row.packageId) ? 'hide' : 'show'}
+                  {expanded.has(row.packageId) ? 'hide' : 'open'}
                 </span>
               </button>
 
               {expanded.has(row.packageId) && (
-                <table className="w-full border-t border-ink-100 text-sm">
-                  <tbody>
-                    {row.gaps.map((gap) => (
-                      <GapRow key={gap.id} gap={gap} columns={3} onAssign={assign} />
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-4 border-t border-ink-100 p-4">
+                  {row.bidderCount > 0 ? (
+                    <>
+                      <LevelingMatrix packageId={row.packageId} onError={onError} />
+                      {/* The sub-by-sub sheet: one row per scope item, one
+                          column per bidder. The comparison above says which bid
+                          is lowest; this says where the difference comes from. */}
+                      <BidTab packageId={row.packageId} onError={onError} />
+                    </>
+                  ) : (
+                    <p className="text-xs text-ink-400">
+                      No bids on this package yet. Drop them, or enter one by hand, on its Bids
+                      step.
+                    </p>
+                  )}
+
+                  {row.gaps.length > 0 && (
+                    <div>
+                      <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-ink-400">
+                        Scope gaps · {row.gaps.length}
+                      </p>
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {row.gaps.map((gap) => (
+                            <GapRow key={gap.id} gap={gap} columns={3} onAssign={assign} />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ))}

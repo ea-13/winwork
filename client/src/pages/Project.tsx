@@ -15,7 +15,7 @@ import type { Project } from './Projects';
 // summary at project level and as the detail once you are inside a package —
 // blocking them behind 'pick a package first' hid the only view that answers
 // 'where is this whole job up to'.
-const STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'leveling', 'buyout'];
+const STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'buyout'];
 
 const isProjectStep = (value: string | null): value is ChainStep =>
   value !== null && (STEPS as string[]).includes(value);
@@ -92,8 +92,8 @@ export function ProjectPage() {
         <ScopePackages projectId={projectId} onError={setError} onChanged={changed} />
       )}
 
-      {(step === 'bids' || step === 'leveling') && (
-        <PackageOverview projectId={projectId} mode={step} onError={setError} />
+      {step === 'bids' && (
+        <PackageOverview projectId={projectId} onError={setError} />
       )}
 
       {step === 'buyout' && <BuyoutLog projectId={projectId} onError={setError} />}

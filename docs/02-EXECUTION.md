@@ -516,14 +516,30 @@ read when picking the build back up, and `npm run resume` points at it.
 
 | | What | Why it matters |
 |---|---|---|
-| **L1** | **Drawing→scope truncation** — 1 batch in 13 lost its answer mid-JSON on a real stamped set | Batch isolation means the run survives it, but ~8% of the sheets go unread. Thinking is now capped at 6k of a 48k budget, which is untested against a full run |
+| **L1** | Drawing→scope still loses a batch to output truncation on a real stamped set | Batch isolation means the run survives it, but ~8% of sheets go unread. `effort: 'low'` is the current mitigation and has not been tested across a full 13-batch run |
 | **L2** | Spec-side drafting has never run on a real specification | Every fix so far came from drawings. A 200-page text spec is a different shape and will have its own failure |
-| **L3** | Scope template covers 15 divisions; 01, 04, 11–14, 23 partial, 25, 27, 32 are thin or absent | The container list is the thing an estimator judges the product on in the first ten seconds |
-| **L4** | `Solicitation` and `BidTab` still carry hand-rolled tables | The Excel surface is on Scope & Packages only. Asked for on *all* tables |
-| **L5** | Formulas are per-cell and browser-local | A formula is lost on reload, and cannot reference another package's total. Fine for entry, not for a model |
-| **L6** | Gap→pattern promotion is manual with no UI | `MISSED_GAP` rows are the corpus. There is no screen that turns one into a `gap_pattern`, so the loop only half closes |
+| **L3** | Scope template covers 15 divisions; 01, 04, 11–14, 25, 27, 32 are thin or absent | The container list is what an estimator judges the product on in the first ten seconds |
+| **L4** | `Solicitation` still carries a hand-rolled table | Scope, buyout and the bid tab are on the grid. Solicitation is the last one that is not |
+| **L5** | Formulas are per-cell and browser-local | A formula is lost on reload and cannot reference another package's total. Fine for entry, not for a model |
+| **L6** | Gap→pattern promotion is manual with no UI | `MISSED_GAP` rows are the corpus. Nothing turns one into a `gap_pattern`, so the loop only half closes |
 | **L7** | Rate limiting, and PDF robustness on malformed files | Carried from P20 |
-| **L8** | Deploy to Replit | `.replit` is committed and correct; the import has never been run |
+| **L8** | Deploy to Replit | Config is correct and the production path is verified locally. The import has never been run |
+| **L13** | P14 has no UI | The API is complete and tested — import, report, verdicts, XLSX export. There is no screen, and no real CO data has been through it |
+| **L14** | Multi-tenant has no way to invite anyone | A client workspace can be created and worked in, but not handed over. That is the next thing it needs to be worth anything |
+
+### Done 2026-08-30
+
+- **L9** — Leveling folded into Buyout. Four steps, not five: the buyout log is
+  the summary sheet and levelling is what you find when you open a package, via
+  the division header. The comparison and the sub-by-sub bid tab both live there.
+- **L10** — Cost codes have a page, an import that scans for the header row
+  rather than assuming row one, and a column on the scope grid.
+- **L11** — Splitting a bid across divisions has a control on the bid itself.
+  The remainder is shown and never silently corrected.
+- **L12** — P14 hindsight: the report, the human verdict endpoint, and the XLSX
+  export. `PREDICTED` is refused unless it names the gap that predicted it, and
+  the catch rate is withheld below five reviewed change orders, because a hit
+  rate over three is not a hit rate.
 
 ## Known, accepted, not bugs
 

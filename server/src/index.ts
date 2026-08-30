@@ -17,6 +17,7 @@ import { corpusRouter } from './routes/corpus.js';
 import { costCodesRouter } from './routes/cost-codes.js';
 import { documentsRouter } from './routes/documents.js';
 import { gatesRouter } from './routes/gates.js';
+import { hindsightRouter } from './routes/hindsight.js';
 import { levelingRouter } from './routes/leveling.js';
 import { healthRouter } from './routes/health.js';
 import { projectsRouter } from './routes/projects.js';
@@ -56,6 +57,7 @@ app.use('/api', requireAuth, contextRouter);
 app.use('/api', requireAuth, copilotRouter);
 app.use('/api', requireAuth, chatRouter);
 app.use('/api', requireAuth, archaeologyRouter);
+app.use('/api', requireAuth, hindsightRouter);
 app.use('/api', requireAuth, agentRunsRouter);
 app.use('/api/gates', requireAuth, gatesRouter);
 
