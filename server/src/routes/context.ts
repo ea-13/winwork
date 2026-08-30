@@ -599,3 +599,133 @@ contextRouter.post(
     res.status(201).json({ createdItems, createdPackages, createdContext, skipped });
   },
 );
+
+/**
+ * Turns something the system missed into something it will look for.
+ *
+ * MISSED_GAP rows are the corpus: each one is a seam nobody wrote down before it
+ * cost money. Until now they accumulated and nothing could act on them, so the
+ * learning loop ran exactly half — it recorded that it had been wrong and had no
+ * way to become less wrong.
+ *
+ * Deliberately manual. A system that promoted its own failures into rules
+ * unsupervised gets worse in a way nobody notices until it is expensive: one
+ * mis-detected gap becomes a pattern, the pattern fires on every job, and the
+ * warnings stop being read. A person decides what is a real pattern.
+ */
+contextRouter.post(
+  '/context/outcomes/:outcomeId/promote',
+  requireRole('EST', 'BC'),
+  async (req, res) => {
+    const outcomeId = req.params.outcomeId ?? '';
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+
+    if (text === '') {
+      res.status(400).json({
+        error: 'Write the pattern in the words you would want to read on the next job.',
+      });
+      return;
+    }
+
+    const db = supabaseForUser(auth.token);
+
+    const { data: outcome } = await db
+      .from('scope_context_outcome')
+      .select('id, scope_item_id, outcome, note')
+      .eq('id', outcomeId)
+      .maybeSingle();
+
+    if (!outcome) {
+      res.status(404).json({ error: 'No such outcome' });
+      return;
+    }
+
+    if (outcome.outcome !== 'MISSED_GAP') {
+      res.status(400).json({
+        error: 'Only a missed gap becomes a pattern. The others are already covered by one.',
+      });
+      return;
+    }
+
+    const { data: item } = await db
+      .from('scope_item')
+      .select('csi_division, csi_section, title')
+      .eq('id', outcome.scope_item_id)
+      .maybeSingle();
+
+    const division = (item?.csi_division as string | null) ?? null;
+    if (!division) {
+      res.status(400).json({
+        error: 'That scope item has no CSI division, so there is nowhere to file the pattern.',
+      });
+      return;
+    }
+
+    // gap_pattern hangs off a division_expert, so the division needs one. It is
+    // created as a stub if missing rather than refusing — a tenant should not
+    // have to seed the knowledge base before recording something they learned.
+    const { data: expert } = await db
+      .from('division_expert')
+      .select('id')
+      .eq('csi_division', division)
+      .maybeSingle();
+
+    let expertId = expert?.id as string | undefined;
+
+    if (!expertId) {
+      const { data: made } = await db
+        .from('division_expert')
+        .insert({ csi_division: division, title: `Division ${division}`, status: 'SEED_STUB' })
+        .select('id')
+        .single();
+      expertId = made?.id as string | undefined;
+    }
+
+    if (!expertId) {
+      res.status(500).json({ error: 'Could not file the pattern against a division' });
+      return;
+    }
+
+    const { data: pattern, error } = await db
+      .from('gap_pattern')
+      .insert({
+        division_expert_id: expertId,
+        pattern_text: text,
+        typical_csi_section: (item?.csi_section as string | null) ?? division,
+        is_frequent_change_order: body.frequentChangeOrder === true,
+        detection_hint:
+          typeof body.detectionHint === 'string' ? body.detectionHint.trim() || null : null,
+        // Starts at one proposal and one confirmation: it came from something
+        // that actually happened, which is more than any seeded pattern can say.
+        times_proposed: 1,
+        times_confirmed: 1,
+        last_confirmed_at: new Date().toISOString(),
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    await db.from('audit_event').insert({
+      tenant_id: auth.tenantId,
+      actor_id: auth.userId,
+      action: 'PROMOTE_GAP_PATTERN',
+      table_name: 'gap_pattern',
+      record_id: pattern.id,
+      before: { fromOutcome: outcomeId, note: outcome.note },
+      after: { division, text },
+    });
+
+    res.status(201).json(pattern);
+  },
+);

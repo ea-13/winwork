@@ -32,6 +32,7 @@ type ContextLine = {
 };
 
 type Missed = {
+  id: string;
   context_id: string | null;
   outcome: string;
   amount: number | null;
@@ -131,6 +132,8 @@ export function ScopeContext({
   const [retiring, setRetiring] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [showRetired, setShowRetired] = useState(false);
+  const [promoting, setPromoting] = useState<string | null>(null);
+  const [patternText, setPatternText] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -222,9 +225,62 @@ export function ScopeContext({
             </p>
           ))}
           <p className="mt-1 text-[11px] text-amber-700">
-            This is the seam the system did not know about. Write it down and it will be checked
-            for on the next job.
+            This is the seam the system did not know about.
           </p>
+
+          {/* Closing the loop. A missed gap becomes a pattern the drafter will
+              reach for on the next job — but a person writes it, because a
+              system that promotes its own failures into rules unsupervised
+              gets worse in a way nobody notices until it is expensive. */}
+          {(() => {
+            const first = missed[0];
+            if (!first) return null;
+            return promoting === first.id ? (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={patternText}
+                  onChange={(event) => setPatternText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') setPromoting(null);
+                  }}
+                  placeholder="Write it as you would want to read it next job"
+                  className="min-w-[18rem] flex-1 rounded border border-flag-500 px-2 py-1 text-[11px] outline-none"
+                />
+                <button
+                  disabled={busy || patternText.trim() === ''}
+                  onClick={() =>
+                    void guard(async () => {
+                      await apiPost(`/context/outcomes/${first.id}/promote`, {
+                        text: patternText.trim(),
+                      });
+                      setPromoting(null);
+                      setPatternText('');
+                    })
+                  }
+                  className="rounded bg-flag-700 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-40"
+                >
+                  Add pattern
+                </button>
+                <button
+                  onClick={() => setPromoting(null)}
+                  className="px-1 text-[11px] text-flag-500"
+                >
+                  cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setPromoting(first.id);
+                  setPatternText('');
+                }}
+                className="mt-1.5 rounded-md border border-flag-500 px-2 py-1 text-[11px] font-medium text-flag-700"
+              >
+                Make this a pattern for next time
+              </button>
+            );
+          })()}
         </div>
       )}
 

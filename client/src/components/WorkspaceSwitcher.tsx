@@ -33,6 +33,9 @@ export function WorkspaceSwitcher() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [inviting, setInviting] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invited, setInvited] = useState<{ email: string; password: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -146,6 +149,96 @@ export function WorkspaceSwitcher() {
                 {workspace.isCurrent && <span className="text-[10px] text-ink-400">current</span>}
               </button>
             ))}
+
+            {/* Handing a workspace over. Nothing is sent — there is no send
+                path in this product (R3) — so the credentials come back here
+                and you pass them on however you normally would. */}
+            {current && (
+              <div className="border-t border-ink-100 pt-1">
+                {inviting === current.tenantId ? (
+                  <div className="space-y-1 px-2 py-1">
+                    <div className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        value={inviteEmail}
+                        onChange={(event) => setInviteEmail(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') setInviting(null);
+                        }}
+                        placeholder="their@email.com"
+                        className="min-w-0 flex-1 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-800"
+                      />
+                      <button
+                        disabled={busy || inviteEmail.trim() === ''}
+                        onClick={() =>
+                          void (async () => {
+                            setBusy(true);
+                            setError(null);
+                            try {
+                              const result = await apiPost<{
+                                email: string;
+                                temporaryPassword: string | null;
+                              }>(`/workspaces/${current.tenantId}/members`, {
+                                email: inviteEmail.trim(),
+                              });
+                              setInvited({
+                                email: result.email,
+                                password: result.temporaryPassword,
+                              });
+                              setInviting(null);
+                              setInviteEmail('');
+                            } catch (caught) {
+                              setError(
+                                caught instanceof Error ? caught.message : String(caught),
+                              );
+                            } finally {
+                              setBusy(false);
+                            }
+                          })()
+                        }
+                        className="rounded bg-ink-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+                      >
+                        {busy ? '…' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setInviting(current.tenantId)}
+                    className="w-full px-3 py-1.5 text-left text-xs text-ink-500 hover:bg-ink-50"
+                  >
+                    + Add someone to {current.name}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {invited && (
+              <div className="mx-2 my-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+                <p className="text-[11px] font-medium text-emerald-900">{invited.email} added</p>
+                {invited.password ? (
+                  <>
+                    <p className="mt-0.5 select-all font-mono text-[11px] text-emerald-800">
+                      {invited.password}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-emerald-700">
+                      Nothing was sent — pass this on yourself. They should change it after
+                      signing in.
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-0.5 text-[10px] text-emerald-700">
+                    They already had a login; it now reaches this workspace too.
+                  </p>
+                )}
+                <button
+                  onClick={() => setInvited(null)}
+                  className="mt-1 text-[10px] text-emerald-700 underline"
+                >
+                  done
+                </button>
+              </div>
+            )}
 
             <div className="mt-1 border-t border-ink-100 pt-1">
               {creating ? (

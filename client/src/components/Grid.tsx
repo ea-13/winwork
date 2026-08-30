@@ -78,6 +78,21 @@ type Props = {
    */
   groupOf?: (row: GridRow) => string;
   renderGroup?: (groupKey: string, rowsInGroup: GridRow[]) => ReactNode;
+  /**
+   * Per-row tint. `review` is for rows a person still has to accept — they are
+   * shown in the table with everything else on purpose, because a proposal you
+   * have to leave the table to look at is a proposal nobody looks at.
+   */
+  rowTone?: (row: GridRow) => 'review' | 'muted' | null;
+  /**
+   * Row picking, from the row-number gutter. Separate from cell selection: a
+   * cell range is for copying values, a row pick is for doing something to
+   * whole records — merging them, retitling them, accepting them.
+   *
+   * Click picks one, shift-click extends, click again unpicks.
+   */
+  pickedIds?: ReadonlySet<string>;
+  onPick?: (ids: Set<string>) => void;
 };
 
 type Cell = { r: number; c: number };
@@ -162,9 +177,14 @@ export function Grid({
   emptyMessage,
   groupOf,
   renderGroup,
+  rowTone,
+  pickedIds,
+  onPick,
 }: Props) {
   const [active, setActive] = useState<Cell>({ r: 0, c: 0 });
   const [anchor, setAnchor] = useState<Cell | null>(null);
+  /** Last row picked from the gutter, so shift-click has something to span. */
+  const [lastPick, setLastPick] = useState<number | null>(null);
   const [editing, setEditing] = useState<{ cell: Cell; value: string } | null>(null);
   const [saveState, setSaveState] = useState<Record<string, SaveState>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -662,7 +682,10 @@ export function Grid({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, r) => (
+            {rows.map((row, r) => {
+              const tone = rowTone?.(row) ?? null;
+              const picked = pickedIds?.has(row.id) ?? false;
+              return (
               <Fragment key={row.id}>
                 {groupOf && renderGroup && groupOf(row) !== (r > 0 ? groupOf(rows[r - 1] as GridRow) : null) && (
                   <tr>
@@ -679,9 +702,33 @@ export function Grid({
                 )}
               <tr>
                 <td
+                  onClick={(event) => {
+                    if (!onPick || isPhantom(row)) return;
+                    const next = new Set(pickedIds ?? []);
+                    if (event.shiftKey && lastPick !== null) {
+                      const [from, to] = lastPick < r ? [lastPick, r] : [r, lastPick];
+                      for (let i = from; i <= to; i += 1) {
+                        const other = rows[i];
+                        if (other && !isPhantom(other)) next.add(other.id);
+                      }
+                    } else if (next.has(row.id)) {
+                      next.delete(row.id);
+                    } else {
+                      next.add(row.id);
+                    }
+                    setLastPick(r);
+                    onPick(next);
+                  }}
                   className={`sticky left-0 z-10 border-b border-r border-slate-200 px-2 py-1 text-right text-xs ${
-                    isPhantom(row) ? 'bg-white text-slate-300' : 'bg-slate-50 text-slate-400'
+                    onPick && !isPhantom(row) ? 'cursor-pointer hover:bg-slate-200' : ''
+                  } ${
+                    picked
+                      ? 'bg-slate-900 font-medium text-white'
+                      : isPhantom(row)
+                        ? 'bg-white text-slate-300'
+                        : 'bg-slate-50 text-slate-400'
                   }`}
+                  title={onPick && !isPhantom(row) ? 'Click to pick this row · shift-click for a range' : undefined}
                 >
                   {r + 1}
                 </td>
@@ -709,6 +756,9 @@ export function Grid({
                       className={[
                         'relative border-b border-r border-slate-200 px-2 py-1 align-top',
                         locked ? 'bg-slate-50 text-slate-500' : 'bg-white text-slate-900',
+                        tone === 'review' ? 'bg-flag-50 text-ink-900' : '',
+                        tone === 'muted' ? 'bg-slate-50 text-slate-400' : '',
+                        picked ? 'bg-sky-100' : '',
                         selected && !isActive ? 'bg-sky-50' : '',
                         column.type === 'number' || column.type === 'currency' ? 'text-right' : '',
                         state === 'error' ? 'bg-red-50' : '',
@@ -765,7 +815,8 @@ export function Grid({
                 })}
               </tr>
               </Fragment>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -774,6 +825,7 @@ export function Grid({
         <span>
           Type to replace · F2 or double-click to edit · Enter down · Tab right · Shift+arrows select
           · Ctrl+C/V with Excel · Ctrl+D fill down · Ctrl+Z undo
+          {onPick ? ' · click a row number to pick it' : ''}
         </span>
         {onAddRow && (
           <button

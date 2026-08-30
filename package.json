@@ -22,7 +22,8 @@
     "verify": "npm run verify:rls && npm run verify:app && npm run verify:isolation",
     "verify:isolation": "node scripts/verify-isolation.mjs",
     "resume": "node scripts/resume.mjs",
-    "preload:demo": "node scripts/preload-demo.mjs"
+    "preload:demo": "node scripts/preload-demo.mjs",
+    "qa": "node scripts/qa.mjs"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",

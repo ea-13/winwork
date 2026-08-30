@@ -275,10 +275,31 @@ type ScopeContextValue = {
  * rewriting a baseline somebody has already levelled bids against would make
  * every comparison built on it wrong.
  */
+/**
+ * A person's edits to what was proposed, keyed by draft id.
+ *
+ * Drafts are immutable, so an estimator who fixes a title before accepting is
+ * not editing the evidence — the draft still says what the agent said. The
+ * correction rides in here, lands on the scope item, and is recorded in the
+ * audit event as a field the human changed. That is exactly the shape R2 wants:
+ * the agent's claim and the human's decision are both legible afterwards, and
+ * they are not the same record.
+ */
+export type ScopeOverrides = Record<string, Partial<ScopeItemValue>>;
+
 export async function promoteScopeDrafts(
   db: SupabaseClient,
-  options: { tenantId: string; actorId: string; projectId: string; runId: string },
-): Promise<{ created: number; updated: number; skippedLocked: number }> {
+  options: {
+    tenantId: string;
+    actorId: string;
+    projectId: string;
+    runId: string;
+    /** Human edits made in the table before accepting, keyed by draft id. */
+    overrides?: ScopeOverrides;
+    /** Draft ids the human rejected outright. Never written. */
+    drop?: string[];
+  },
+): Promise<{ created: number; updated: number; skippedLocked: number; dropped: number; edited: number }> {
   const { data: drafts, error } = await db
     .from('draft')
     .select('id, target_table, target_id, field, proposed_value, source_location, confidence')
@@ -302,9 +323,21 @@ export async function promoteScopeDrafts(
   let created = 0;
   let updated = 0;
   let skippedLocked = 0;
+  let dropped = 0;
+  let edited = 0;
+
+  const dropSet = new Set(options.drop ?? []);
+  const overrides = options.overrides ?? {};
 
   for (const draft of rows) {
-    const value = (draft.proposed_value ?? {}) as ScopeItemValue;
+    if (dropSet.has(draft.id)) {
+      dropped += 1;
+      continue;
+    }
+
+    const override = overrides[draft.id];
+    const value = { ...((draft.proposed_value ?? {}) as ScopeItemValue), ...(override ?? {}) };
+    if (override && Object.keys(override).length > 0) edited += 1;
     if (!value.title || !value.scope_id) continue;
 
     const match = byScopeId.get(value.scope_id);
@@ -353,10 +386,23 @@ export async function promoteScopeDrafts(
     table_name: 'scope_item',
     record_id: options.projectId,
     before: null,
-    after: { agent_run_id: options.runId, created, updated, skippedLocked },
+    after: {
+      agent_run_id: options.runId,
+      created,
+      updated,
+      skippedLocked,
+      dropped,
+      edited,
+      // Which fields a person changed before accepting, so "accept with
+      // changes" is answerable later without diffing against the drafts.
+      changed_fields: [
+        ...new Set(Object.values(overrides).flatMap((patch) => Object.keys(patch))),
+      ],
+      dropped_draft_ids: [...dropSet],
+    },
   });
 
-  return { created, updated, skippedLocked };
+  return { created, updated, skippedLocked, dropped, edited };
 }
 
 /**

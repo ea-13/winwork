@@ -27,8 +27,9 @@ export function Layout({ children, breadcrumb, projectId = null }: Props) {
   const nav = [
     { to: '/', label: 'Projects', active: pathname === '/' || pathname.startsWith('/projects') },
     { to: '/subcontractors', label: 'Subs', active: pathname.startsWith('/subcontractors') },
+    { to: '/activity', label: 'Activity', active: pathname.startsWith('/activity') },
     { to: '/cost-codes', label: 'Cost codes', active: pathname.startsWith('/cost-codes') },
-    { to: '/archaeology', label: 'Archaeology', active: pathname.startsWith('/archaeology') },
+    { to: '/hindsight', label: 'Hindsight', active: pathname.startsWith('/hindsight') },
   ];
 
   return (

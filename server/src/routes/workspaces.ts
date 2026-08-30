@@ -209,3 +209,197 @@ workspacesRouter.post('/workspaces/:tenantId/switch', async (req, res) => {
     refreshRequired: true,
   });
 });
+
+/**
+ * Who else is in this workspace.
+ *
+ * A workspace could be created and worked in but never given to anybody, which
+ * made "client workspace" a folder rather than a handover. This is the smallest
+ * thing that changes that: invite somebody by email, they get a login scoped to
+ * this tenant and nothing else.
+ */
+workspacesRouter.get('/workspaces/:tenantId/members', async (req, res) => {
+  const tenantId = req.params.tenantId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  // Membership of the workspace being asked about is the authorisation. Asking
+  // who is in a workspace you are not in should look like it does not exist.
+  const { data: mine } = await supabaseAdmin
+    .from('tenant_membership')
+    .select('tenant_id')
+    .eq('auth_user_id', auth.userId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (!mine) {
+    res.status(404).json({ error: 'No such workspace' });
+    return;
+  }
+
+  const { data: members } = await supabaseAdmin
+    .from('tenant_membership')
+    .select('auth_user_id, app_user_id, roles, is_owner, created_at')
+    .eq('tenant_id', tenantId);
+
+  const appUserIds = (members ?? []).map((row) => row.app_user_id as string);
+
+  const { data: users } = appUserIds.length
+    ? await supabaseAdmin.from('app_user').select('id, email, display_name').in('id', appUserIds)
+    : { data: [] as Record<string, unknown>[] };
+
+  const byId = new Map((users ?? []).map((row) => [row.id as string, row]));
+
+  res.json(
+    (members ?? []).map((member) => ({
+      email: (byId.get(member.app_user_id as string)?.email as string | null) ?? 'unknown',
+      roles: member.roles ?? [],
+      isOwner: member.is_owner ?? false,
+      isYou: member.auth_user_id === auth.userId,
+      since: member.created_at,
+    })),
+  );
+});
+
+/**
+ * Adds somebody to a workspace.
+ *
+ * Creates the auth user if they are new, gives them an app_user row inside THIS
+ * tenant, and a membership. Their access is scoped to this workspace and
+ * nothing else — the same isolation that separates two customers separates a
+ * client from everything internal, which is what makes handing one over safe.
+ *
+ * Note what this does NOT do: it sends nothing. R3 means there is no send path
+ * anywhere in this product, so it returns the credentials and the person who
+ * invited passes them on however they normally would. That is deliberate, not a
+ * gap — a system that cannot email cannot email the wrong person.
+ */
+workspacesRouter.post(
+  '/workspaces/:tenantId/members',
+  requireRole('ADMIN'),
+  async (req, res) => {
+    const tenantId = req.params.tenantId ?? '';
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const roles = Array.isArray(body.roles) && body.roles.length > 0 ? body.roles : ['EST'];
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      res.status(400).json({ error: 'A valid email address is required' });
+      return;
+    }
+
+    const { data: mine } = await supabaseAdmin
+      .from('tenant_membership')
+      .select('tenant_id, is_owner')
+      .eq('auth_user_id', auth.userId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (!mine) {
+      res.status(404).json({ error: 'No such workspace' });
+      return;
+    }
+
+    const { data: listed } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    let authUser = listed?.users.find((user) => user.email?.toLowerCase() === email);
+
+    // A one-time password rather than an invite link, because there is no send
+    // path to deliver a link through and a link nobody can send is worse than a
+    // password somebody hands over.
+    const temporaryPassword = `wp-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 6)}`;
+
+    if (!authUser) {
+      const { data: made, error } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: temporaryPassword,
+        email_confirm: true,
+      });
+      if (error || !made.user) {
+        res.status(400).json({ error: error?.message ?? 'Could not create that login' });
+        return;
+      }
+      authUser = made.user;
+    }
+
+    const { data: already } = await supabaseAdmin
+      .from('tenant_membership')
+      .select('id')
+      .eq('auth_user_id', authUser.id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (already) {
+      res.status(409).json({ error: `${email} is already in this workspace` });
+      return;
+    }
+
+    const { data: appUser, error: userError } = await supabaseAdmin
+      .from('app_user')
+      .insert({ tenant_id: tenantId, email, display_name: email })
+      .select('id')
+      .single();
+
+    if (userError || !appUser) {
+      res.status(400).json({ error: userError?.message ?? 'Could not add them to this workspace' });
+      return;
+    }
+
+    await supabaseAdmin
+      .from('user_role')
+      .insert((roles as string[]).map((role) => ({ tenant_id: tenantId, user_id: appUser.id, role })));
+
+    const { error: memberError } = await supabaseAdmin.from('tenant_membership').insert({
+      auth_user_id: authUser.id,
+      tenant_id: tenantId,
+      app_user_id: appUser.id,
+      roles,
+      is_owner: false,
+    });
+
+    if (memberError) {
+      res.status(400).json({ error: memberError.message });
+      return;
+    }
+
+    // If this is their first workspace, point their claims at it so their first
+    // login lands somewhere rather than nowhere.
+    const claims = (authUser.app_metadata ?? {}) as { tenant_id?: string };
+    if (!claims.tenant_id) {
+      await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+        app_metadata: { tenant_id: tenantId, app_user_id: appUser.id, roles },
+      });
+    }
+
+    await supabaseAdmin.from('audit_event').insert({
+      tenant_id: tenantId,
+      actor_id: auth.userId,
+      action: 'ADD_WORKSPACE_MEMBER',
+      table_name: 'tenant_membership',
+      record_id: appUser.id,
+      before: null,
+      after: { email, roles },
+    });
+
+    res.status(201).json({
+      email,
+      roles,
+      // Only returned when the login was just created. An existing user keeps
+      // the password they already have.
+      temporaryPassword: listed?.users.some((user) => user.email?.toLowerCase() === email)
+        ? null
+        : temporaryPassword,
+      note:
+        'Nothing was sent — this system has no send path (R3). Pass the details on yourself, and ' +
+        'have them change the password after their first sign-in.',
+    });
+  },
+);

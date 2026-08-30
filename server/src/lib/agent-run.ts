@@ -93,9 +93,20 @@ type StartOptions = {
  * worker, never by a request handler — a long run must not sit behind an HTTP
  * connection.
  */
+/** Thrown when a person stops a job while it is running. Not a failure. */
+export class JobCancelled extends Error {
+  constructor() {
+    super('Cancelled while running');
+    this.name = 'JobCancelled';
+  }
+}
+
 export class AgentRun implements AgentContext {
   private seq = 0;
   private cost = 0;
+  /** The job this run belongs to, so cancellation can be noticed. */
+  private jobId: string | null = null;
+  private lastCancelCheck = 0;
 
   private constructor(
     readonly runId: string,
@@ -154,8 +165,42 @@ export class AgentRun implements AgentContext {
     return run;
   }
 
+  /** Tells this run which job it is working, so cancellation can reach it. */
+  attachJob(jobId: string): void {
+    this.jobId = jobId;
+  }
+
+  /**
+   * Has somebody stopped this?
+   *
+   * Checked from emit rather than on a timer, because agents emit between
+   * batches and that is exactly where stopping is cheap and safe — the request
+   * already in flight finishes, and the next one never starts. On a plan set
+   * that is the difference between one more model call and twelve.
+   *
+   * Throttled to once every few seconds: emit is called often and a database
+   * round trip per line would cost more than the cancellation saves.
+   */
+  private async checkCancelled(): Promise<void> {
+    if (!this.jobId) return;
+
+    const now = Date.now();
+    if (now - this.lastCancelCheck < 5000) return;
+    this.lastCancelCheck = now;
+
+    const { data } = await this.db
+      .from('job')
+      .select('cancelled_at')
+      .eq('id', this.jobId)
+      .maybeSingle();
+
+    if (data?.cancelled_at) throw new JobCancelled();
+  }
+
   /** One line in the activity stream. Sequential, so a reader can resume. */
   async emit(eventType: AgentEventType, message: string, payload?: unknown): Promise<void> {
+    await this.checkCancelled();
+
     this.seq += 1;
     const { error } = await this.db.from('agent_event').insert({
       tenant_id: this.tenantId,

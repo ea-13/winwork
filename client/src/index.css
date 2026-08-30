@@ -30,7 +30,11 @@
   /* One accent, earned. Amber means uncovered scope and nothing else. */
   --color-flag-50: #fdf6e8;
   --color-flag-100: #f9e7c0;
+  --color-flag-200: #f2d69a;
+  --color-flag-300: #e6bf6b;
+  --color-flag-400: #d0a23f;
   --color-flag-500: #b4831f;
+  --color-flag-600: #966c17;
   --color-flag-700: #7a5711;
 
   --font-sans:

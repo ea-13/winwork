@@ -36,6 +36,34 @@ type WorkPackage = {
 
 type Division = { code: string; title: string };
 
+/**
+ * A scope item an agent has proposed and nobody has accepted.
+ *
+ * It is not a scope item. It has no id in scope_item, it does not count in any
+ * total, and nothing can be bid against it. It is shown in the same table as
+ * the real rows because that is the only place a person can judge it — against
+ * the scope that already exists.
+ */
+type Proposed = {
+  draftId: string;
+  runId: string;
+  scope_id: string | null;
+  csi_division: string | null;
+  csi_section: string | null;
+  title: string | null;
+  description: string | null;
+  unit: string | null;
+  quantity: number | null;
+  quantity_basis: string | null;
+  confidence: number | null;
+  source_location: string | null;
+  replacesExistingId: string | null;
+};
+
+/** Prefix that marks a grid row as a proposal rather than a scope item. */
+const DRAFT = 'draft:';
+const isDraftRow = (id: string) => id.startsWith(DRAFT);
+
 const UNITS = ['EA', 'SF', 'LF', 'SY', 'CY', 'LB', 'TON', 'HR', 'LS', 'ALLOW'] as const;
 
 /** Scope with no package cannot be bid, so it gets its own group, not a blank. */
@@ -76,11 +104,21 @@ export function ScopePackages({
   const [template, setTemplate] = useState<
     { code: string; packageName: string; items: number; titles: string[] }[]
   >([]);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [pickedDivisions, setPickedDivisions] = useState<Set<string>>(new Set());
   const [showNotes, setShowNotes] = useState(true);
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [contextFor, setContextFor] = useState<string | null>(null);
+  const [proposed, setProposed] = useState<Proposed[]>([]);
+  /** Edits made to a proposal before accepting it. Never written to the draft. */
+  const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
+  const [rejected, setRejected] = useState<Set<string>>(new Set());
+  const [acceptRationale, setAcceptRationale] = useState('');
+  /** Rows picked from the gutter, for doing one thing to several records. */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [keepId, setKeepId] = useState<string | null>(null);
+  const [mergeRationale, setMergeRationale] = useState('');
+  const [merging, setMerging] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editingPackage, setEditingPackage] = useState<{
@@ -90,11 +128,14 @@ export function ScopePackages({
   } | null>(null);
 
   const load = useCallback(async () => {
-    const [scope, pkgs, divs, codes] = await Promise.all([
+    const [scope, pkgs, divs, codes, awaiting] = await Promise.all([
       apiGet<ScopeItem[]>(`/projects/${projectId}/scope-items`),
       apiGet<WorkPackage[]>(`/projects/${projectId}/packages`),
       apiGet<Division[]>('/divisions'),
       apiGet<{ id: string; code: string; description: string }[]>('/cost-codes').catch(() => []),
+      apiGet<{ rows: Proposed[] }>(`/projects/${projectId}/proposed-scope`).catch(() => ({
+        rows: [] as Proposed[],
+      })),
     ]);
 
     // Which package each scope item sits in. package_scope is many-to-many in
@@ -116,6 +157,7 @@ export function ScopePackages({
     setDivisions(divs);
     setCostCodes(codes);
     setAssignment(map);
+    setProposed(awaiting.rows);
   }, [projectId]);
 
   useEffect(() => {
@@ -186,18 +228,87 @@ export function ScopePackages({
     [packages],
   );
 
-  const rows = useMemo<GridRow[]>(
-    () =>
-      visible.map((item) => ({
-        ...item,
-        package: packageById.get(assignment[item.id] ?? '')?.name ?? '',
-        cost_code: costCodes.find((code) => code.id === item.cost_code_id)?.code ?? '',
-      })) as unknown as GridRow[],
-    [visible, assignment, packageById, costCodes],
+  /**
+   * Which package a proposal would land in, so it appears among the scope it is
+   * a proposal about rather than in a pile at the bottom. It is a guess from the
+   * division and it is presentational only — accepting does not move anything
+   * into a package, and the row still has to be assigned like any other.
+   */
+  const packageForDivision = useCallback(
+    (division: string | null) =>
+      packages.find((pkg) => pkg.lead_division === division)?.id ?? UNASSIGNED,
+    [packages, costCodes],
   );
+
+  const rows = useMemo<GridRow[]>(() => {
+    const real = visible.map((item) => ({
+      ...item,
+      package: packageById.get(assignment[item.id] ?? '')?.name ?? '',
+      cost_code: costCodes.find((code) => code.id === item.cost_code_id)?.code ?? '',
+    }));
+
+    const drafts = proposed
+      .filter((row) => !collapsed.has(packageForDivision(row.csi_division)))
+      .map((row) => ({
+        ...row,
+        ...(edits[row.draftId] ?? {}),
+        id: `${DRAFT}${row.draftId}`,
+        is_locked: false,
+        cost_code: '',
+        package: packageById.get(packageForDivision(row.csi_division))?.name ?? '',
+      }));
+
+    // Proposals sit with the package they would join, directly under its real
+    // rows, so the comparison an estimator has to make is one glance long.
+    const groupOrder = new Map<string, number>();
+    for (const row of real) {
+      const group = assignment[row.id] ?? UNASSIGNED;
+      if (!groupOrder.has(group)) groupOrder.set(group, groupOrder.size);
+    }
+
+    const groupOf = (row: { id: string; csi_division?: string | null }) =>
+      isDraftRow(row.id)
+        ? packageForDivision(row.csi_division ?? null)
+        : (assignment[row.id] ?? UNASSIGNED);
+
+    const rank = (group: string) =>
+      group === UNASSIGNED ? Number.MAX_SAFE_INTEGER : (groupOrder.get(group) ?? groupOrder.size);
+
+    return [...real, ...drafts].sort((a, b) => {
+      const ga = groupOf(a);
+      const gb = groupOf(b);
+      if (ga !== gb) return rank(ga) - rank(gb);
+      // Within a group: baseline first, then what is being proposed for it.
+      const da = isDraftRow(a.id) ? 1 : 0;
+      const db = isDraftRow(b.id) ? 1 : 0;
+      if (da !== db) return da - db;
+      return String(a.scope_id ?? '').localeCompare(String(b.scope_id ?? ''));
+    }) as unknown as GridRow[];
+  }, [
+    visible,
+    assignment,
+    packageById,
+    costCodes,
+    proposed,
+    edits,
+    collapsed,
+    packageForDivision,
+  ]);
 
   const commit = useCallback(
     async (rowId: string, patch: Record<string, unknown>) => {
+      // Editing a proposal edits nothing yet. The correction is held here and
+      // rides along when you accept — the draft itself is evidence and stays
+      // exactly as the agent wrote it.
+      if (isDraftRow(rowId)) {
+        const draftId = rowId.slice(DRAFT.length);
+        delete patch.package;
+        delete patch.cost_code;
+        if (Object.keys(patch).length === 0) return;
+        setEdits((current) => ({ ...current, [draftId]: { ...current[draftId], ...patch } }));
+        return;
+      }
+
       const item = items.find((row) => row.id === rowId);
       if (!item) return;
 
@@ -273,6 +384,78 @@ export function ScopePackages({
       }),
     [projectId, newDivision],
   );
+
+  const pendingDrafts = useMemo(
+    () => proposed.filter((row) => !rejected.has(row.draftId)),
+    [proposed, rejected],
+  );
+  const editedCount = useMemo(
+    () => proposed.filter((row) => Object.keys(edits[row.draftId] ?? {}).length > 0).length,
+    [proposed, edits],
+  );
+
+  /**
+   * Accepts what is on screen, including your edits, and skips what you rejected.
+   *
+   * One call per run, because acceptance is recorded against the run that
+   * proposed the work — that is what makes "who accepted this, and did they
+   * change it" answerable a year later.
+   */
+  const acceptProposed = () =>
+    guard(async () => {
+      const runIds = [...new Set(proposed.map((row) => row.runId))];
+
+      for (const runId of runIds) {
+        const mine = proposed.filter((row) => row.runId === runId);
+        const overrides: Record<string, Record<string, unknown>> = {};
+        for (const row of mine) {
+          const patch = edits[row.draftId];
+          if (patch && Object.keys(patch).length > 0) overrides[row.draftId] = patch;
+        }
+        await apiPost(`/runs/${runId}/promote-scope`, {
+          rationale: acceptRationale.trim(),
+          overrides,
+          drop: mine.filter((row) => rejected.has(row.draftId)).map((row) => row.draftId),
+        });
+      }
+
+      setEdits({});
+      setRejected(new Set());
+      setAcceptRationale('');
+      setPicked(new Set());
+    });
+
+  const pickedDraftIds = useMemo(
+    () => [...picked].filter(isDraftRow).map((id) => id.slice(DRAFT.length)),
+    [picked],
+  );
+  const pickedItemIds = useMemo(() => [...picked].filter((id) => !isDraftRow(id)), [picked]);
+  const pickedItems = useMemo(
+    () => items.filter((item) => pickedItemIds.includes(item.id)),
+    [items, pickedItemIds],
+  );
+
+  const mergePicked = () =>
+    guard(async () => {
+      const keep = keepId ?? pickedItems[0]?.id;
+      if (!keep) return;
+      const result = await apiPost<{ merged: number; kept: string; note: string | null }>(
+        `/projects/${projectId}/scope-items/merge`,
+        {
+          keepId: keep,
+          mergeIds: pickedItemIds.filter((id) => id !== keep),
+          rationale: mergeRationale.trim(),
+        },
+      );
+      setPicked(new Set());
+      setKeepId(null);
+      setMergeRationale('');
+      setMerging(false);
+      onError(
+        `Merged ${result.merged} row(s) into ${result.kept}.` +
+          (result.note ? ` ${result.note}` : ''),
+      );
+    });
 
   const savePackage = async () => {
     if (!editingPackage) return;
@@ -513,7 +696,7 @@ export function ScopePackages({
               </p>
             </div>
             <button
-              disabled={busy || picked.size === 0}
+              disabled={busy || pickedDivisions.size === 0}
               onClick={() =>
                 void guard(async () => {
                   const result = await apiPost<{
@@ -521,9 +704,9 @@ export function ScopePackages({
                     createdPackages: number;
                     createdContext: number;
                     skipped: number;
-                  }>(`/projects/${projectId}/scope-template`, { divisions: [...picked] });
+                  }>(`/projects/${projectId}/scope-template`, { divisions: [...pickedDivisions] });
                   setTemplating(false);
-                  setPicked(new Set());
+                  setPickedDivisions(new Set());
                   onError(
                     `Added ${result.createdItems} scope items in ${result.createdPackages} package(s), ` +
                       `with ${result.createdContext} context lines` +
@@ -533,18 +716,18 @@ export function ScopePackages({
               }
               className="shrink-0 rounded-md bg-ink-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
             >
-              Add {picked.size || ''} division{picked.size === 1 ? '' : 's'}
+              Add {pickedDivisions.size || ''} division{pickedDivisions.size === 1 ? '' : 's'}
             </button>
           </div>
 
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {template.map((division) => {
-              const on = picked.has(division.code);
+              const on = pickedDivisions.has(division.code);
               return (
                 <button
                   key={division.code}
                   onClick={() =>
-                    setPicked((current) => {
+                    setPickedDivisions((current) => {
                       const next = new Set(current);
                       if (next.has(division.code)) next.delete(division.code);
                       else next.add(division.code);
@@ -605,7 +788,13 @@ export function ScopePackages({
           is always shown before anything is written. */}
       <TableCommand
         table="scope_item"
-        rows={rows}
+        // Picking rows first scopes what you say to them, which is how you ask
+        // for something on four lines without describing the four lines.
+        rows={
+          pickedItemIds.length > 0
+            ? rows.filter((row) => pickedItemIds.includes(String(row.id)))
+            : rows.filter((row) => !isDraftRow(String(row.id)))
+        }
         // csi_division and package are how an estimator actually describes a
         // set of rows ("the plumbing ones"), so they have to be visible even
         // though package is not directly writable here.
@@ -615,7 +804,13 @@ export function ScopePackages({
         ]}
         onApplied={() => void load().then(() => onChanged?.())}
         onError={onError}
-        placeholder='Tell it what to change — "set every division 22 basis to per fixture schedule"'
+        placeholder={
+          pickedItemIds.length > 0
+            ? `Tell it what to change on the ${pickedItemIds.length} picked row${
+                pickedItemIds.length === 1 ? '' : 's'
+              }`
+            : 'Tell it what to change — "set every division 22 basis to per fixture schedule"'
+        }
       />
 
       <Grid
@@ -625,10 +820,184 @@ export function ScopePackages({
         onAddRow={addScope}
         onCreateRow={createScope}
         blankRows={12}
-        groupOf={(row) => assignment[String(row.id)] ?? UNASSIGNED}
+        groupOf={(row) =>
+          isDraftRow(String(row.id))
+            ? packageForDivision((row.csi_division as string | null) ?? null)
+            : (assignment[String(row.id)] ?? UNASSIGNED)
+        }
+        rowTone={(row) =>
+          !isDraftRow(String(row.id))
+            ? null
+            : rejected.has(String(row.id).slice(DRAFT.length))
+              ? 'muted'
+              : 'review'
+        }
+        pickedIds={picked}
+        onPick={setPicked}
         renderGroup={renderGroup}
         emptyMessage="No scope yet. Draft it from the bid set on the Documents step, or start typing below."
       />
+
+      {/* Accept, at the bottom of the table the proposals are shown in.
+          A count in a banner is not a review — you have to be able to see the
+          rows, change them, and throw individual ones out before saying yes. */}
+      {proposed.length > 0 && (
+        <div className="sticky bottom-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-flag-200 bg-flag-50 px-4 py-3 shadow-lg">
+          <span className="text-[13px] font-semibold text-flag-700">
+            {pendingDrafts.length} proposed row{pendingDrafts.length === 1 ? '' : 's'} awaiting you
+          </span>
+          <span className="text-[11px] text-flag-600">
+            shaded above · edit any cell before accepting
+            {editedCount > 0 && ` · ${editedCount} edited`}
+            {rejected.size > 0 && ` · ${rejected.size} rejected`}
+          </span>
+
+          {pickedDraftIds.length > 0 && (
+            <span className="flex items-center gap-1">
+              <button
+                onClick={() =>
+                  setRejected((current) => {
+                    const next = new Set(current);
+                    for (const id of pickedDraftIds) next.add(id);
+                    return next;
+                  })
+                }
+                className="rounded-md border border-flag-400 px-2 py-1 text-[11px] font-medium text-flag-700"
+              >
+                Reject {pickedDraftIds.length} picked
+              </button>
+              {rejected.size > 0 && (
+                <button
+                  onClick={() => setRejected(new Set())}
+                  className="px-1 text-[11px] text-flag-600 underline"
+                >
+                  undo rejects
+                </button>
+              )}
+            </span>
+          )}
+
+          <span className="ml-auto flex items-center gap-1.5">
+            <input
+              value={acceptRationale}
+              onChange={(event) => setAcceptRationale(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && acceptRationale.trim()) void acceptProposed();
+              }}
+              placeholder="Why are you accepting this?"
+              className="w-72 rounded border border-flag-300 bg-white px-2 py-1 text-xs outline-none focus:border-ink-800"
+            />
+            <button
+              disabled={busy || acceptRationale.trim() === '' || pendingDrafts.length === 0}
+              onClick={() => void acceptProposed()}
+              className="rounded-md bg-ink-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+              title="Your edits go in instead of what was drafted. The drafts stay as evidence."
+            >
+              {busy
+                ? '…'
+                : editedCount > 0
+                  ? `Accept ${pendingDrafts.length} with changes`
+                  : `Accept ${pendingDrafts.length}`}
+            </button>
+          </span>
+
+          <p className="w-full text-[11px] text-flag-600">
+            An agent proposed these; nothing here is baseline until you say so. Your name, your
+            reason and any field you changed are recorded against the run.
+          </p>
+        </div>
+      )}
+
+      {/* Several rows at once. Picked from the row-number gutter, because the
+          things you want to do to four scope lines are not cell edits. */}
+      {pickedItemIds.length > 0 && (
+        <div className="sticky bottom-0 z-20 space-y-2 rounded-xl border border-ink-300 bg-white px-4 py-3 shadow-lg">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-[13px] font-semibold text-ink-900">
+              {pickedItemIds.length} row{pickedItemIds.length === 1 ? '' : 's'} picked
+            </span>
+            <span className="max-w-xl truncate text-[11px] text-ink-400">
+              {pickedItems.map((item) => item.scope_id).join(' · ')}
+            </span>
+
+            <span className="ml-auto flex flex-wrap items-center gap-1.5">
+              {pickedItemIds.length > 1 && (
+                <button
+                  onClick={() => {
+                    setMerging((current) => !current);
+                    setKeepId(pickedItems[0]?.id ?? null);
+                  }}
+                  className="rounded-md border border-ink-300 px-2.5 py-1 text-xs font-medium text-ink-700"
+                  title="Fold these into one row, keeping the scope ID everything joins on"
+                >
+                  Merge…
+                </button>
+              )}
+              <button
+                onClick={() =>
+                  void guard(async () => {
+                    for (const id of pickedItemIds) {
+                      await apiDelete(`/scope-items/${id}`);
+                    }
+                    setPicked(new Set());
+                  })
+                }
+                className="rounded-md border border-ink-300 px-2.5 py-1 text-xs text-ink-500 hover:border-red-300 hover:text-red-600"
+                title="Refused for locked rows and for anything already bid"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => {
+                  setPicked(new Set());
+                  setMerging(false);
+                }}
+                className="px-1 text-xs text-ink-400"
+              >
+                clear
+              </button>
+            </span>
+          </div>
+
+          {merging && pickedItemIds.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-ink-100 pt-2">
+              <span className="text-xs text-ink-500">Keep</span>
+              <select
+                value={keepId ?? ''}
+                onChange={(event) => setKeepId(event.target.value || null)}
+                className="max-w-md rounded border border-ink-300 px-2 py-1 text-xs"
+              >
+                {pickedItems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.scope_id} — {item.title}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={mergeRationale}
+                onChange={(event) => setMergeRationale(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && mergeRationale.trim()) void mergePicked();
+                }}
+                placeholder="Why — merging removes rows"
+                className="w-64 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-800"
+              />
+              <button
+                disabled={busy || mergeRationale.trim() === '' || !keepId}
+                onClick={() => void mergePicked()}
+                className="rounded-md bg-ink-900 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
+              >
+                {busy ? '…' : `Merge ${pickedItemIds.length - 1} into it`}
+              </button>
+              <p className="w-full text-[11px] text-ink-400">
+                Blank fields on the kept row get filled from the others, and their context lines
+                move across. Quantities are not added up — two rows may be duplicates or may be
+                two real numbers, and this cannot tell which.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {noteFor && (
         <aside className="fixed bottom-6 right-6 z-30 w-80 rounded-lg border border-slate-300 bg-white shadow-xl">

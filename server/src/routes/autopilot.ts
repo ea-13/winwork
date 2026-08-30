@@ -202,11 +202,18 @@ autopilotRouter.post('/runs/:runId/promote-scope', requireRole('EST', 'BC'), asy
   }
 
   try {
+    const body = (req.body ?? {}) as {
+      overrides?: Record<string, Record<string, unknown>>;
+      drop?: string[];
+    };
+
     const result = await promoteScopeDrafts(db, {
       tenantId: auth.tenantId,
       actorId: auth.userId,
       projectId: run.project_id as string,
       runId,
+      overrides: body.overrides ?? {},
+      drop: Array.isArray(body.drop) ? body.drop : [],
     });
 
     await db.from('approval').insert({
@@ -218,16 +225,122 @@ autopilotRouter.post('/runs/:runId/promote-scope', requireRole('EST', 'BC'), asy
       target_id: run.project_id,
     });
 
-    res.json({
-      ...result,
-      note:
-        result.skippedLocked > 0
-          ? `${result.skippedLocked} locked item(s) were left alone. Unlocking is a gate crossing, not a re-draft.`
-          : null,
-    });
+    const notes: string[] = [];
+    if (result.skippedLocked > 0) {
+      notes.push(
+        `${result.skippedLocked} locked item(s) were left alone. Unlocking is a gate crossing, not a re-draft.`,
+      );
+    }
+    if (result.edited > 0) {
+      notes.push(`${result.edited} row(s) went in with your edits, not as drafted.`);
+    }
+    if (result.dropped > 0) {
+      notes.push(`${result.dropped} row(s) you rejected were not written.`);
+    }
+
+    res.json({ ...result, note: notes.length > 0 ? notes.join(' ') : null });
   } catch (caught) {
     res.status(400).json({ error: caught instanceof Error ? caught.message : String(caught) });
   }
+});
+
+/**
+ * The scope an agent has proposed for this project and nobody has accepted yet,
+ * shaped like scope items so the table can show them inline.
+ *
+ * This exists because a review queue on its own does not work. An estimator
+ * asked "accept 34 drafted scope items?" with a count and no rows will either
+ * accept blind or never accept at all, and both are worse than not drafting.
+ * The proposals belong in the scope table, next to the scope they are proposals
+ * about, coloured so nobody mistakes one for baseline.
+ *
+ * Nothing here is a scope item yet. Every row carries the draft id it came from,
+ * because acceptance is per draft and the audit trail is per draft.
+ */
+autopilotRouter.get('/projects/:projectId/proposed-scope', async (req, res) => {
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const projectId = req.params.projectId ?? '';
+  const db = supabaseForUser(auth.token);
+
+  const { data: runs } = await db
+    .from('agent_run')
+    .select('id, agent_type, input_ref, finished_at')
+    .eq('project_id', projectId)
+    .eq('status', 'DONE')
+    .order('finished_at', { ascending: false })
+    .limit(50);
+
+  const runIds = (runs ?? []).map((run) => run.id as string);
+  if (runIds.length === 0) {
+    res.json({ runs: [], rows: [] });
+    return;
+  }
+
+  const [{ data: drafts }, { data: promotions }, { data: existing }] = await Promise.all([
+    db
+      .from('draft')
+      .select('id, agent_run_id, proposed_value, source_location, confidence, fill_tag')
+      .eq('target_table', 'scope_item')
+      .in('agent_run_id', runIds),
+    db
+      .from('audit_event')
+      .select('after')
+      .eq('action', 'PROMOTE_SCOPE'),
+    db.from('scope_item').select('id, scope_id').eq('project_id', projectId),
+  ]);
+
+  const promoted = new Set(
+    (promotions ?? [])
+      .map((row) => (row.after as { agent_run_id?: string } | null)?.agent_run_id)
+      .filter(Boolean) as string[],
+  );
+
+  const byScopeId = new Map((existing ?? []).map((item) => [item.scope_id as string, item.id as string]));
+
+  const pending = (drafts ?? []).filter((draft) => !promoted.has(draft.agent_run_id as string));
+
+  const rows = pending.map((draft) => {
+    const value = (draft.proposed_value ?? {}) as Record<string, unknown>;
+    const scopeId = (value.scope_id as string | null) ?? null;
+    return {
+      draftId: draft.id as string,
+      runId: draft.agent_run_id as string,
+      scope_id: scopeId,
+      csi_division: (value.csi_division as string | null) ?? null,
+      csi_section: (value.csi_section as string | null) ?? null,
+      title: (value.title as string | null) ?? null,
+      description: (value.description as string | null) ?? null,
+      unit: (value.unit as string | null) ?? null,
+      // R1 all the way through: an unstated quantity arrives null and stays
+      // null. It is not zero on the way to the screen either.
+      quantity: (value.quantity as number | null) ?? null,
+      quantity_basis: (value.quantity_basis as string | null) ?? null,
+      confidence: (draft.confidence as number | null) ?? null,
+      source_location: (draft.source_location as string | null) ?? null,
+      // Whether accepting would overwrite an item that already exists, which
+      // is the one thing worth knowing before clicking accept.
+      replacesExistingId: scopeId ? (byScopeId.get(scopeId) ?? null) : null,
+    };
+  });
+
+  const usedRunIds = new Set(rows.map((row) => row.runId));
+
+  res.json({
+    runs: (runs ?? [])
+      .filter((run) => usedRunIds.has(run.id as string))
+      .map((run) => ({
+        id: run.id,
+        agentType: run.agent_type,
+        inputRef: run.input_ref,
+        finishedAt: run.finished_at,
+      })),
+    rows,
+  });
 });
 
 /** Accepts a context-drafting run onto its scope items. */

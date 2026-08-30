@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useSession } from './lib/session';
+import { ActivityPage } from './pages/ActivityPage';
 import { ArchaeologyPage } from './pages/Archaeology';
 import { CostCodesPage } from './pages/CostCodes';
+import { HindsightPage } from './pages/Hindsight';
 import { Login } from './pages/Login';
 import { PackagePage } from './pages/Package';
 import { ProjectPage } from './pages/Project';
@@ -71,10 +73,26 @@ export default function App() {
         }
       />
       <Route
+        path="/activity"
+        element={
+          <Protected>
+            <ActivityPage />
+          </Protected>
+        }
+      />
+      <Route
         path="/cost-codes"
         element={
           <Protected>
             <CostCodesPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/hindsight"
+        element={
+          <Protected>
+            <HindsightPage />
           </Protected>
         }
       />

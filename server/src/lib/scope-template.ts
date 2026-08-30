@@ -50,6 +50,64 @@ export type TemplateDivision = {
 
 export const SCOPE_TEMPLATE: TemplateDivision[] = [
   {
+    code: '01',
+    packageName: 'General Requirements',
+    items: [
+      {
+        section: '01 50 00',
+        title: 'Temporary facilities and controls',
+        description: 'Site office, temporary power and water, fencing, sanitary facilities.',
+        unit: 'LS',
+        context: [
+          {
+            kind: 'ASSUMPTION',
+            text: 'Duration is assumed to equal the contract programme. An extension of time extends this cost, and it is rarely re-priced when it does.',
+          },
+          {
+            kind: 'INCLUSION',
+            text: 'Consumption, not just the connection — temporary power and water are billed monthly for the length of the job.',
+          },
+          {
+            kind: 'RISK',
+            text: 'Temporary facilities are priced against a programme that then slips, and the overrun ends up as nobody’s line item.',
+          },
+        ],
+      },
+      {
+        section: '01 71 23',
+        title: 'Field engineering and layout',
+        description: 'Survey control, layout for the trades, and the as-built record.',
+        unit: 'LS',
+        context: [
+          {
+            kind: 'INTERFACE',
+            text: 'Whether each trade lays out its own work or works to GC control lines. Both answers are normal, and they cost differently.',
+          },
+          {
+            kind: 'INCLUSION',
+            text: 'The as-built record the owner is owed at closeout, kept as the work proceeds rather than reconstructed at the end.',
+          },
+        ],
+      },
+      {
+        section: '01 74 00',
+        title: 'Cleaning and waste management',
+        description: 'Progressive clean, waste haulage and disposal, final clean to handover.',
+        unit: 'LS',
+        context: [
+          {
+            kind: 'RISK',
+            text: 'Progressive clean is assumed to be each trade’s own and is then done by none of them. Name who owns it.',
+          },
+          {
+            kind: 'INCLUSION',
+            text: 'Final clean to handover standard, glass and floors included.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     code: '02',
     packageName: 'Existing Conditions & Demolition',
     items: [
@@ -105,6 +163,32 @@ export const SCOPE_TEMPLATE: TemplateDivision[] = [
           { kind: 'INCLUSION', text: 'Saw-cut control joints, joint filler and the specified surface finish.' },
           { kind: 'ASSUMPTION', text: 'Vapour barrier and sub-base are in place and accepted before placement.' },
           { kind: 'INTERFACE', text: 'Floor flatness tolerance where resilient or thin-set finishes follow — the finish trade will reject a slab that meets a lesser spec.' },
+        ],
+      },
+    ],
+  },
+  {
+    code: '04',
+    packageName: 'Masonry',
+    items: [
+      {
+        section: '04 20 00',
+        title: 'Unit masonry',
+        description: 'CMU and brick, with reinforcing, grout and accessories.',
+        unit: 'SF',
+        context: [
+          {
+            kind: 'INCLUSION',
+            text: 'Reinforcing, grout, ties, flashing and weeps — the accessories are most of the difference between two masonry numbers.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Lintels and loose steel: furnished under division 05, set by this trade. If neither party says so, they are furnished by nobody.',
+          },
+          {
+            kind: 'ASSUMPTION',
+            text: 'Scaffold and access are carried here unless stated otherwise. It is a large cost and it is routinely assumed to be the GC’s.',
+          },
         ],
       },
     ],
@@ -308,6 +392,118 @@ export const SCOPE_TEMPLATE: TemplateDivision[] = [
     ],
   },
   {
+    code: '11',
+    packageName: 'Equipment',
+    items: [
+      {
+        section: '11 00 00',
+        title: 'Owner and contractor equipment',
+        description: 'Equipment per the schedule, set in place with connections and commissioning.',
+        unit: 'EA',
+        context: [
+          {
+            kind: 'ASSUMPTION',
+            text: 'Which items are owner-furnished. This one answer moves the price more than anything else on the line.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Rough-in for owner-furnished equipment: whose dimensions are used, and who carries the cost when they turn out to be wrong.',
+          },
+          {
+            kind: 'RISK',
+            text: 'Owner-furnished equipment arriving late, or not matching the rough-in, is a schedule and cost claim waiting to be written.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    code: '12',
+    packageName: 'Furnishings',
+    items: [
+      {
+        section: '12 20 00',
+        title: 'Window treatments',
+        description: 'Blinds, shades and hardware per the schedule.',
+        unit: 'EA',
+        context: [
+          {
+            kind: 'INTERFACE',
+            text: 'Blocking and shade pockets are built under division 06 or 09 and must be located before ceilings close.',
+          },
+        ],
+      },
+      {
+        section: '12 30 00',
+        title: 'Casework and countertops',
+        description: 'Manufactured casework, tops, and hardware.',
+        unit: 'LF',
+        context: [
+          {
+            kind: 'EXCLUSION',
+            text: 'Plumbing and electrical connections — carried under 22 and 26.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Sink and fixture cut-outs: the fabricator cuts, the plumber sets. Say which, because both assume the other.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    code: '13',
+    packageName: 'Special Construction',
+    items: [
+      {
+        section: '13 34 00',
+        title: 'Pre-engineered structures',
+        description: 'Pre-engineered building or enclosure, delivered and erected.',
+        unit: 'LS',
+        context: [
+          {
+            kind: 'INCLUSION',
+            text: 'Engineering, stamped drawings, and the deferred submittal package.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Anchor bolts and foundations: the supplier provides reactions, the foundation is designed and built under division 03.',
+          },
+          {
+            kind: 'RISK',
+            text: 'Long lead. The delivery date a supplier gives at bid time is rarely the one that holds.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    code: '14',
+    packageName: 'Conveying Equipment',
+    items: [
+      {
+        section: '14 20 00',
+        title: 'Elevators',
+        description: 'Elevator supply, installation, testing and certification.',
+        unit: 'EA',
+        context: [
+          {
+            kind: 'EXCLUSION',
+            text: 'Hoistway construction, pit waterproofing and the machine room — carried by the building trades, not here.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Power, lighting, telephone and fire alarm recall into the hoistway: divisions 26 and 28.',
+          },
+          {
+            kind: 'RISK',
+            text: 'Inspection and certification scheduling sits outside everyone’s control and routinely holds up handover.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     code: '21',
     packageName: 'Fire Suppression',
     items: [
@@ -406,6 +602,32 @@ export const SCOPE_TEMPLATE: TemplateDivision[] = [
     ],
   },
   {
+    code: '25',
+    packageName: 'Integrated Automation',
+    items: [
+      {
+        section: '25 00 00',
+        title: 'Building controls',
+        description: 'Control system, field points, programming, graphics and checkout.',
+        unit: 'LS',
+        context: [
+          {
+            kind: 'INTERFACE',
+            text: 'Which points are furnished by the mechanical trade and which are wired here. This split is where controls scope disappears.',
+          },
+          {
+            kind: 'INCLUSION',
+            text: 'Point-to-point checkout, and the witnessed test the commissioning agent will ask for.',
+          },
+          {
+            kind: 'ASSUMPTION',
+            text: 'Whether the network and head-end are owner IT or carried here.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     code: '26',
     packageName: 'Electrical',
     items: [
@@ -429,6 +651,32 @@ export const SCOPE_TEMPLATE: TemplateDivision[] = [
           { kind: 'BASIS_OF_DESIGN', text: 'Fixture schedule governs. Substitutions change the energy compliance calculation.' },
           { kind: 'INCLUSION', text: 'Controls, sensors and the acceptance testing required by the energy code.' },
           { kind: 'RISK', text: 'Lighting control acceptance testing is a specialist scope routinely priced by nobody.' },
+        ],
+      },
+    ],
+  },
+  {
+    code: '27',
+    packageName: 'Communications',
+    items: [
+      {
+        section: '27 10 00',
+        title: 'Structured cabling',
+        description: 'Data cabling, racks, patch panels, labelling and certification.',
+        unit: 'EA',
+        context: [
+          {
+            kind: 'INCLUSION',
+            text: 'Testing and certification of every drop, with the report handed over.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Pathways, conduit and backboxes: division 26 or here. Both trades routinely exclude it.',
+          },
+          {
+            kind: 'ASSUMPTION',
+            text: 'Whether active equipment is owner-supplied. Usually it is, and usually nobody wrote that down.',
+          },
         ],
       },
     ],
@@ -474,6 +722,48 @@ export const SCOPE_TEMPLATE: TemplateDivision[] = [
         context: [
           { kind: 'INCLUSION', text: 'Installation and ongoing maintenance of erosion control through the job.' },
           { kind: 'RISK', text: 'Maintenance of erosion control for the whole project duration is priced as installation only more often than not.' },
+        ],
+      },
+    ],
+  },
+  {
+    code: '32',
+    packageName: 'Exterior Improvements',
+    items: [
+      {
+        section: '32 12 00',
+        title: 'Paving',
+        description: 'Asphalt or concrete paving, base course, and striping.',
+        unit: 'SF',
+        context: [
+          {
+            kind: 'INCLUSION',
+            text: 'Base preparation, compaction testing, and striping.',
+          },
+          {
+            kind: 'ASSUMPTION',
+            text: 'Subgrade accepted as found. Remediation is extra, and it is the most common paving claim there is.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Accessible routes and slopes: a failed inspection here is a rebuild, not a repair.',
+          },
+        ],
+      },
+      {
+        section: '32 90 00',
+        title: 'Landscaping and irrigation',
+        description: 'Planting, irrigation, and the establishment period.',
+        unit: 'LS',
+        context: [
+          {
+            kind: 'INCLUSION',
+            text: 'The establishment or maintenance period — it is a duration, and it is a real cost.',
+          },
+          {
+            kind: 'INTERFACE',
+            text: 'Irrigation point of connection and backflow prevention: division 22 or here.',
+          },
         ],
       },
     ],

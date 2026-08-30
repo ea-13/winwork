@@ -106,13 +106,16 @@ for (const table of ['draft', 'approval', 'audit_event']) {
 // DELETE triggers are row-level (migration 0002), so proving them needs a real
 // row. The whole fixture rolls back, including the row the trigger refused to
 // delete.
+//
+// `draft` is deliberately NOT in this list any more. Migration 0021 drew the
+// line where it belongs: the append-only guarantee is that evidence cannot be
+// silently REVISED, and UPDATE is still rejected on draft — that assertion runs
+// above and must never be relaxed. But a draft is project-scoped, and a project
+// that could never be deleted because an agent once proposed something about it
+// is not a product. The tenant-scoped ledger — approval and audit_event — keeps
+// its no-delete trigger, and those are the rows that answer "who accepted what,
+// and why".
 const seedOneRow = {
-  draft: `
-    with t as (insert into public.tenant (name) values ('rls probe') returning id),
-         r as (insert into public.agent_run (tenant_id, agent_type)
-               select id, 'probe' from t returning id, tenant_id)
-    insert into public.draft (tenant_id, agent_run_id, target_table)
-    select tenant_id, id, 'probe' from r`,
   approval: `
     with t as (insert into public.tenant (name) values ('rls probe') returning id)
     insert into public.approval (tenant_id, gate, rationale)
@@ -133,6 +136,42 @@ for (const [table, seed] of Object.entries(seedOneRow)) {
     await q('rollback');
     check(error.code === '42501', `${table}: DELETE of an existing row rejected`, error.code);
   }
+}
+
+// Migration 0021, from the other side: a draft CAN be deleted, and that is the
+// behaviour a deletable project depends on. If this ever starts failing, some
+// migration has put the trigger back and projects are permanent again.
+try {
+  await q('begin');
+  await q(`
+    with t as (insert into public.tenant (name) values ('rls probe') returning id),
+         r as (insert into public.agent_run (tenant_id, agent_type)
+               select id, 'probe' from t returning id, tenant_id)
+    insert into public.draft (tenant_id, agent_run_id, target_table)
+    select tenant_id, id, 'probe' from r`);
+  await q('delete from public.draft');
+  await q('rollback');
+  check(true, 'draft: DELETE allowed, so a project can be removed (0021)');
+} catch (error) {
+  await q('rollback');
+  check(false, 'draft: DELETE allowed, so a project can be removed (0021)', error.code ?? error.message);
+}
+
+// And the guarantee that replaced it: a draft still cannot be REWRITTEN.
+try {
+  await q('begin');
+  await q(`
+    with t as (insert into public.tenant (name) values ('rls probe') returning id),
+         r as (insert into public.agent_run (tenant_id, agent_type)
+               select id, 'probe' from t returning id, tenant_id)
+    insert into public.draft (tenant_id, agent_run_id, target_table)
+    select tenant_id, id, 'probe' from r`);
+  await q("update public.draft set target_table = 'tampered'");
+  await q('rollback');
+  check(false, 'draft: UPDATE of an existing row still rejected', 'it succeeded');
+} catch (error) {
+  await q('rollback');
+  check(error.code === '42501', 'draft: UPDATE of an existing row still rejected', error.code);
 }
 
 // Regression test for migration 0002: statement-level DELETE triggers made this

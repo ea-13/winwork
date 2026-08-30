@@ -42,11 +42,13 @@ export function PendingDrafts({
 
   const load = useCallback(async () => {
     const data = await apiGet<{ groups: Group[] }>('/review-queue');
+    // Drafted scope items are no longer announced here. They are shown as
+    // shaded rows in the scope table itself, where they can be read against
+    // the scope they are proposals about, edited, and accepted at the bottom.
+    // A banner saying "34 items await you" was a count, not a review.
     setGroups(
       data.groups.filter(
-        (group) =>
-          !group.accepted &&
-          (group.byTable.scope_item !== undefined || group.byTable.scope_context !== undefined),
+        (group) => !group.accepted && group.byTable.scope_context !== undefined,
       ),
     );
   }, []);
@@ -59,7 +61,7 @@ export function PendingDrafts({
     setBusy(true);
     onError(null);
     try {
-      const kind = group.byTable.scope_item !== undefined ? 'scope' : 'context';
+      const kind = 'context';
       const result = await apiPost<{ created?: number; updated?: number; note?: string | null }>(
         `/runs/${group.run.id}/promote-${kind}`,
         { rationale: rationale.trim() },
@@ -85,15 +87,12 @@ export function PendingDrafts({
       </p>
 
       {groups.map((group) => {
-        const items = group.byTable.scope_item ?? 0;
         const context = group.byTable.scope_context ?? 0;
 
         return (
           <div key={group.run.id} className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-flag-700">
-              {items > 0
-                ? `${items} scope item${items === 1 ? '' : 's'}`
-                : `${context} context line${context === 1 ? '' : 's'}`}
+              {`${context} context line${context === 1 ? '' : 's'}`}
               {group.run.input_ref && (
                 <span className="text-flag-500"> from {group.run.input_ref}</span>
               )}

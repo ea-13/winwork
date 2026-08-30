@@ -1,5 +1,5 @@
 import type { AgentContext } from './agent-run.js';
-import { AgentRun } from './agent-run.js';
+import { AgentRun, JobCancelled } from './agent-run.js';
 import { runDemoStream } from '../agents/demo-stream.js';
 import { runQuoteExtraction } from '../agents/extract-quote.js';
 import { runChangeOrderArchaeology } from '../agents/co-archaeologist.js';
@@ -117,12 +117,28 @@ async function runOne(): Promise<boolean> {
       ? await AgentRun.resume(job.agent_run_id, job.tenant_id)
       : await AgentRun.start({ tenantId: job.tenant_id, agentType: job.job_type });
 
+    // So the run can notice being stopped, at its own next checkpoint.
+    run.attachJob(job.id);
+
     await setQuoteStatus(job, 'EXTRACTING');
     await agent(run, job.payload ?? {});
     await run.finish('DONE');
     await setQuoteStatus(job, 'EXTRACTED');
     await finish(job, 'DONE');
   } catch (caught) {
+    // Cancelling is somebody's decision, not a failure. Retrying it would
+    // undo the decision, and recording it as FAILED would teach people to
+    // ignore failures.
+    if (caught instanceof JobCancelled) {
+      if (run) {
+        await run.emit('WARNING', 'Stopped. Anything produced before this is kept.').catch(() => undefined);
+        await run.finish('FAILED').catch(() => undefined);
+      }
+      await finish(job, 'FAILED', 'Cancelled while running');
+      console.log(`worker: job ${job.id} cancelled`);
+      return true;
+    }
+
     const message = caught instanceof Error ? caught.message : String(caught);
 
     // Retries are bounded. A job that keeps failing is dead-lettered rather
