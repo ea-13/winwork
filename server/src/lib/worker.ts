@@ -7,6 +7,9 @@ import { runDivisionConsult } from '../agents/division-consult.js';
 import { runScopeDrafter } from '../agents/draft-scope.js';
 import { runSheetIndexer } from '../agents/index-sheets.js';
 import { runScopeContextDrafter } from '../agents/scope-context.js';
+import { runCoverageAuditor } from '../agents/audit-coverage.js';
+import { runBidComparison } from '../agents/compare-bids.js';
+import { runCostCodeMapper } from '../agents/map-cost-codes.js';
 import { runNormalisation } from '../agents/normalise-quote.js';
 import { supabaseAdmin } from './supabase.js';
 
@@ -25,6 +28,9 @@ const AGENTS: Record<string, Agent> = {
   draft_scope: (ctx, payload) => runScopeDrafter(ctx, payload),
   index_sheets: (ctx, payload) => runSheetIndexer(ctx, payload),
   draft_scope_context: (ctx, payload) => runScopeContextDrafter(ctx, payload),
+  audit_coverage: (ctx, payload) => runCoverageAuditor(ctx, payload),
+  compare_bids: (ctx, payload) => runBidComparison(ctx, payload),
+  map_cost_codes: (ctx, payload) => runCostCodeMapper(ctx, payload),
   co_archaeology: (ctx, payload) => runChangeOrderArchaeology(ctx, payload),
 };
 

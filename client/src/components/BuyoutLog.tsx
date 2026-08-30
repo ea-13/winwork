@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Grid, type GridColumn, type GridRow } from './Grid';
 import { apiGet, apiPatch, apiPost } from '../lib/api';
 import { money } from './Layout';
 
@@ -284,7 +285,6 @@ export function BuyoutLog({
   const [rows, setRows] = useState<Row[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<{ id: string; field: string; value: string } | null>(null);
 
   const load = useCallback(async () => {
     const data = await apiGet<{ rows: Row[]; totals: Totals | null }>(
@@ -297,20 +297,6 @@ export function BuyoutLog({
   useEffect(() => {
     load().catch((caught: Error) => onError(caught.message));
   }, [load, onError]);
-
-  async function save() {
-    if (!editing) return;
-    const cleaned = editing.value.replace(/[$,\s]/g, '');
-    const parsed = cleaned === '' ? null : Number(cleaned);
-    setEditing(null);
-    if (cleaned !== '' && !Number.isFinite(parsed)) return;
-    try {
-      await apiPatch(`/records/work_package/${editing.id}`, { [editing.field]: parsed });
-      await load();
-    } catch (caught) {
-      onError(caught instanceof Error ? caught.message : String(caught));
-    }
-  }
 
   const assign = async (
     gapId: string,
@@ -332,38 +318,71 @@ export function BuyoutLog({
       else next.add(id);
       return next;
     });
+  /**
+   * The buyout log as a spreadsheet.
+   *
+   * Budget, allowance and contingency are the estimator's own numbers, so they
+   * get the same surface as everywhere else — arrows, ranges, copy/paste
+   * against Excel, and =SUM() down a column. The derived columns are read-only
+   * because typing over an adjusted total would be typing over the arithmetic
+   * the whole product rests on.
+   */
+  const columns = useMemo<GridColumn[]>(
+    () => [
+      { key: 'division', label: 'Div', width: 60, editable: false },
+      { key: 'name', label: 'Package', width: 220, editable: false },
+      { key: 'bidder', label: 'Bidder', width: 180, editable: false },
+      { key: 'budget', label: 'Budget', width: 120, type: 'currency' },
+      { key: 'allowance', label: 'Allowance', width: 120, type: 'currency' },
+      { key: 'contingency', label: 'Contingency', width: 120, type: 'currency' },
+      { key: 'gapCarry', label: 'Gap carry', width: 110, type: 'currency', editable: false },
+      { key: 'adjustedTotal', label: 'Adjusted', width: 130, type: 'currency', editable: false },
+      { key: 'committed', label: 'Carried', width: 130, type: 'currency', editable: false },
+      { key: 'variance', label: 'Variance', width: 120, type: 'currency', editable: false },
+      { key: 'openGaps', label: 'Open gaps', width: 90, type: 'number', editable: false },
+    ],
+    [],
+  );
 
-  const cell = (
-    row: Row,
-    field: 'budget_amount' | 'allowance_amount' | 'contingency_amount',
-    value: number | null,
-  ) => {
-    const active = editing?.id === row.packageId && editing.field === field;
-    return (
-      <td
-        className="cursor-text px-3 py-2 text-right text-slate-700 hover:bg-slate-50"
-        onClick={() =>
-          setEditing({ id: row.packageId, field, value: value === null ? '' : String(value) })
-        }
-      >
-        {active ? (
-          <input
-            autoFocus
-            value={editing.value}
-            onChange={(event) => setEditing({ ...editing, value: event.target.value })}
-            onBlur={() => void save()}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void save();
-              if (event.key === 'Escape') setEditing(null);
-            }}
-            className="w-24 rounded border border-slate-900 px-1 text-right outline-none"
-          />
-        ) : (
-          <span className={value === null ? 'text-slate-300' : ''}>{money(value)}</span>
-        )}
-      </td>
-    );
-  };
+  const gridRows = useMemo<GridRow[]>(
+    () =>
+      rows.map((row) => ({
+        id: row.packageId,
+        division: row.division ?? '',
+        name: row.name,
+        bidder: row.bidder ?? '',
+        budget: row.budget,
+        allowance: row.allowance,
+        contingency: row.contingency,
+        gapCarry: (row.gapAllowance ?? 0) + (row.gapContingency ?? 0) || null,
+        adjustedTotal: row.adjustedTotal,
+        committed: row.committed,
+        variance: row.variance,
+        openGaps: row.openGaps || null,
+      })) as unknown as GridRow[],
+    [rows],
+  );
+
+  const commitPackage = useCallback(
+    async (packageId: string, patch: Record<string, unknown>) => {
+      const FIELD: Record<string, string> = {
+        budget: 'budget_amount',
+        allowance: 'allowance_amount',
+        contingency: 'contingency_amount',
+      };
+
+      const mapped: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(patch)) {
+        const column = FIELD[key];
+        if (column) mapped[column] = value;
+      }
+      if (Object.keys(mapped).length === 0) return;
+
+      await apiPatch(`/records/work_package/${packageId}`, mapped);
+      await load();
+    },
+    [load],
+  );
 
   const undecided = rows.reduce((sum, row) => sum + row.openGaps, 0);
 
@@ -392,162 +411,77 @@ export function BuyoutLog({
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="w-8 px-2 py-2" />
-              <th className="px-3 py-2 font-medium">Package</th>
-              <th className="px-3 py-2 font-medium">Bidder</th>
-              <th className="px-3 py-2 text-right font-medium">Budget</th>
-              <th className="px-3 py-2 text-right font-medium">Allowance</th>
-              <th className="px-3 py-2 text-right font-medium">Contingency</th>
-              <th className="px-3 py-2 text-right font-medium">Adjusted</th>
-              <th className="px-3 py-2 text-right font-medium">Carried</th>
-              <th className="px-3 py-2 text-right font-medium">Variance</th>
-            </tr>
-          </thead>
+      <Grid
+        columns={columns}
+        rows={gridRows}
+        onCommit={commitPackage}
+        emptyMessage="No packages yet. Put some scope into a package on the Scope step."
+      />
 
-          <tbody>
-            {rows.map((row) => (
-              <Fragment key={row.packageId}>
-                <tr className="border-b border-slate-100">
-                  <td className="px-2 py-2">
-                    {row.gaps.length > 0 && (
-                      <button
-                        onClick={() => toggle(row.packageId)}
-                        aria-label="Show scope gaps"
-                        className="w-4 text-slate-500"
-                      >
-                        {expanded.has(row.packageId) ? '▾' : '▸'}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="font-mono text-[11px] text-slate-400">
-                      {row.division ?? '—'}
-                    </span>{' '}
-                    <Link
-                      to={`/packages/${row.packageId}`}
-                      className="font-medium text-slate-900 hover:underline"
+      {totals && rows.length > 0 && (
+        <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-xs">
+          <span className="mr-auto font-semibold text-ink-900">Project total</span>
+          <span className="text-ink-500">budget <b className="text-ink-900">{money(totals.budget)}</b></span>
+          <span className="text-ink-500">allowance <b className="text-ink-900">{money(totals.allowance + totals.gapAllowance)}</b></span>
+          <span className="text-ink-500">contingency <b className="text-ink-900">{money(totals.contingency + totals.gapContingency)}</b></span>
+          <span className="text-ink-500">carried <b className="text-ink-900">{money(totals.committed)}</b></span>
+          <span className={totals.variance > 0 ? 'text-red-700' : 'text-emerald-700'}>
+            variance <b>{totals.variance > 0 ? '+' : ''}{money(totals.variance)}</b>
+          </span>
+        </div>
+      )}
+
+      {totals && totals.openExposure > 0 && (
+        <p className="rounded-lg border border-flag-100 bg-flag-50 px-3 py-2 text-xs text-flag-700">
+          {money(totals.openExposure)} of exposure still sits in undecided gaps and is NOT in the
+          carried total above.
+        </p>
+      )}
+
+      {/* Gaps hang below the grid rather than inside it. A gap is not a package,
+          and giving it a row in the same cell model would break every range
+          selection and every formula that counts packages. */}
+      <div className="space-y-2">
+        {rows
+          .filter((row) => row.gaps.length > 0)
+          .map((row) => (
+            <div key={row.packageId} className="rounded-xl border border-ink-200 bg-white">
+              <button
+                onClick={() => toggle(row.packageId)}
+                className="flex w-full items-center justify-between px-4 py-2 text-left"
+              >
+                <span className="text-xs">
+                  <span className="font-mono text-ink-400">{row.division ?? '—'}</span>{' '}
+                  <span className="font-medium text-ink-900">{row.name}</span>
+                  <span className="ml-2 text-ink-400">
+                    {row.gaps.length} gap{row.gaps.length === 1 ? '' : 's'}
+                  </span>
+                  {row.openGaps > 0 && (
+                    <span
+                      className={`ml-2 font-medium ${
+                        row.criticalGaps > 0 ? 'text-red-700' : 'text-flag-700'
+                      }`}
                     >
-                      {row.name}
-                    </Link>
-                    <span className="block text-xs text-slate-400">
-                      {row.bidderCount} bid{row.bidderCount === 1 ? '' : 's'}
-                      {row.openGaps > 0 && (
-                        <span className={row.criticalGaps > 0 ? 'text-red-600' : 'text-amber-600'}>
-                          {' '}
-                          · {row.openGaps} gap{row.openGaps === 1 ? '' : 's'} undecided
-                        </span>
-                      )}
-                    </span>
-                    {row.notes && (
-                      <span className="mt-0.5 block max-w-md truncate text-[11px] text-slate-400">
-                        {row.notes}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {row.bidder ?? <span className="text-slate-300">—</span>}
-                    {row.bidder && !row.selected && (
-                      <span className="ml-1 text-xs text-slate-400">(leading)</span>
-                    )}
-                  </td>
-                  {cell(row, 'budget_amount', row.budget)}
-                  {cell(row, 'allowance_amount', row.allowance)}
-                  {cell(row, 'contingency_amount', row.contingency)}
-                  <td className="px-3 py-2 text-right text-slate-600">
-                    {money(row.adjustedTotal)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                    {money(row.committed)}
-                    {(row.gapAllowance || row.gapContingency) && (
-                      <span className="block text-[11px] font-normal text-slate-400">
-                        incl. {money((row.gapAllowance ?? 0) + (row.gapContingency ?? 0))} for gaps
-                      </span>
-                    )}
-                  </td>
-                  <td
-                    className={`px-3 py-2 text-right font-medium ${
-                      row.variance === null
-                        ? 'text-slate-400'
-                        : row.variance > 0
-                          ? 'text-red-700'
-                          : 'text-emerald-700'
-                    }`}
-                  >
-                    {row.variance === null
-                      ? '—'
-                      : `${row.variance > 0 ? '+' : ''}${money(row.variance)}`}
-                  </td>
-                </tr>
-
-                {expanded.has(row.packageId) &&
-                  row.gaps.map((gap) => (
-                    <GapRow key={gap.id} gap={gap} columns={3} onAssign={assign} />
-                  ))}
-              </Fragment>
-            ))}
-
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={9} className="px-4 py-6 text-sm text-slate-400">
-                  No packages yet. Add one per division on the Packages step.
-                </td>
-              </tr>
-            )}
-          </tbody>
-
-          {totals && rows.length > 0 && (
-            <tfoot>
-              <tr className="border-t-2 border-slate-300 bg-slate-50 font-medium">
-                <td />
-                <td className="px-3 py-2" colSpan={2}>
-                  Project total
-                </td>
-                <td className="px-3 py-2 text-right">{money(totals.budget)}</td>
-                <td className="px-3 py-2 text-right">
-                  {money(totals.allowance)}
-                  {totals.gapAllowance > 0 && (
-                    <span className="block text-[11px] font-normal text-slate-400">
-                      +{money(totals.gapAllowance)} gaps
+                      {row.openGaps} undecided
                     </span>
                   )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {money(totals.contingency)}
-                  {totals.gapContingency > 0 && (
-                    <span className="block text-[11px] font-normal text-slate-400">
-                      +{money(totals.gapContingency)} gaps
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">{money(totals.adjusted)}</td>
-                <td className="px-3 py-2 text-right">{money(totals.committed)}</td>
-                <td
-                  className={`px-3 py-2 text-right ${
-                    totals.variance > 0 ? 'text-red-700' : 'text-emerald-700'
-                  }`}
-                >
-                  {totals.variance > 0 ? '+' : ''}
-                  {money(totals.variance)}
-                </td>
-              </tr>
+                </span>
+                <span className="text-xs text-ink-400">
+                  {expanded.has(row.packageId) ? 'hide' : 'show'}
+                </span>
+              </button>
 
-              {totals.openExposure > 0 && (
-                <tr className="bg-slate-50 text-xs text-amber-700">
-                  <td />
-                  <td className="px-3 pb-2" colSpan={7}>
-                    {money(totals.openExposure)} of exposure still sits in undecided gaps and is
-                    NOT in the carried total above.
-                  </td>
-                  <td />
-                </tr>
+              {expanded.has(row.packageId) && (
+                <table className="w-full border-t border-ink-100 text-sm">
+                  <tbody>
+                    {row.gaps.map((gap) => (
+                      <GapRow key={gap.id} gap={gap} columns={3} onAssign={assign} />
+                    ))}
+                  </tbody>
+                </table>
               )}
-            </tfoot>
-          )}
-        </table>
+            </div>
+          ))}
       </div>
 
       <p className="text-xs text-slate-400">

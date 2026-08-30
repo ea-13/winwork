@@ -2,14 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BuyoutLog } from '../components/BuyoutLog';
 import { ChainNav, type ChainStep } from '../components/ChainNav';
+import { Copilot } from '../components/Copilot';
 import { DocumentDrop } from '../components/DocumentDrop';
 import { ErrorBanner, Layout } from '../components/Layout';
+import { PackageOverview } from '../components/PackageOverview';
 import { ScopePackages } from '../components/ScopePackages';
 import { apiGet } from '../lib/api';
 import type { Project } from './Projects';
 
 /** The steps this page owns. Bids and leveling belong to a package. */
-const STEPS: ChainStep[] = ['documents', 'scope', 'buyout'];
+// Every step is reachable here. Bids and leveling render as a per-package
+// summary at project level and as the detail once you are inside a package —
+// blocking them behind 'pick a package first' hid the only view that answers
+// 'where is this whole job up to'.
+const STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'leveling', 'buyout'];
 
 const isProjectStep = (value: string | null): value is ChainStep =>
   value !== null && (STEPS as string[]).includes(value);
@@ -74,6 +80,8 @@ export function ProjectPage() {
         refreshKey={version}
       />
 
+      <Copilot projectId={projectId} refreshKey={version} onDid={changed} />
+
       <ErrorBanner message={error} />
 
       {step === 'documents' && (
@@ -82,6 +90,10 @@ export function ProjectPage() {
 
       {step === 'scope' && (
         <ScopePackages projectId={projectId} onError={setError} onChanged={changed} />
+      )}
+
+      {(step === 'bids' || step === 'leveling') && (
+        <PackageOverview projectId={projectId} mode={step} onError={setError} />
       )}
 
       {step === 'buyout' && <BuyoutLog projectId={projectId} onError={setError} />}

@@ -56,6 +56,7 @@ P21–P28 are work that came out of real use and had no number before.
 | **P35–P39** | Restructure and first real run | ✅ | Five steps, Excel grid, scope template, real plan set indexed |
 | **P11** | Leveling matrix | ✅✅ | **Completed 2026-08-30** — weights, scoring, H6 selection. Was marked done without them |
 | **P40–P44** | Manual path, workspaces, cost codes | ✅ | Manual bids, blank rows, multi-tenant, cost codes, split bids |
+| **P45–P48** | AI-native surface | ✅ | Copilot suggestions, A10 coverage audit, A11 bid comparison, A12 cost-code mapper |
 
 ---
 
@@ -567,3 +568,44 @@ been confirmed against reality.
 
 Once buyout is complete this tool is finished. Tracking change orders during
 construction is a different product living somewhere else.
+
+
+## P45–P48 · Making it AI-native
+
+Seven agents existed before this block. Every one was a button on a screen you
+had to think to visit, which is a tool that HAS AI — it only works for somebody
+already taught it.
+
+**The suggestion engine** (`server/src/lib/suggestions.ts`) reads real state and
+says what is worth doing and why, ordered BLOCKING → HIGH → NORMAL. It is
+deliberately deterministic: not one line asks a model what you should do next,
+because a suggestion engine that is sometimes confidently wrong gets ignored
+within a week and takes the agents behind it down with it. The models do the
+work; rules decide when the work is worth doing. Every suggestion states a
+reason, not an instruction — an argument is something you can disagree with.
+
+**Three new agents:**
+
+| | | |
+|---|---|---|
+| **A10** | Scope coverage auditor | Reads the bid set back against the drafted scope and reports what the documents require that nothing covers. Drafting finds what is there; this finds what is missing. Writes findings, never scope |
+| **A11** | Bid comparability analyst | Reads N bids side by side and writes why they are not comparable. Never states a price, never recommends a bidder — the arithmetic is deterministic and the choice is H6 |
+| **A12** | Cost code mapper | Maps scope onto the tenant's own structure. Only ever returns codes that exist; a proposed code not in the list is dropped, not drafted |
+
+**The bid pane was rebuilt.** It read `Extract → Accept extraction → Normalise →
+Accept mapping`. Every one of those is a real operation and not one is a thing an
+estimator does — "normalise" and "accept mapping" were our internal vocabulary on
+the screen. It is now **Read the bid** → review and correct inline → **Publish to
+project**. The same two model passes, the same H5 gate, the same approval and
+audit rows; what went away was needing to know our words.
+
+### Two API facts worth not rediscovering
+
+- `thinking: { type: 'enabled', budget_tokens: N }` is **rejected** by
+  claude-sonnet-5 with a 400 telling you to use `output_config.effort`. Thinking
+  and output share one budget, so where the hard part is volume rather than
+  judgement, `effort: 'low'` is what leaves room for the answer.
+- The SDK refuses a non-streaming call whose estimated duration passes ten
+  minutes, and the estimate scales with `max_tokens` — so a large output budget
+  is refused before the request is sent. Everything structured goes through
+  `messages.stream()`, whose `finalMessage()` still carries `parsed_output`.

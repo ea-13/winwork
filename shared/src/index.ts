@@ -43,7 +43,8 @@ export type QuoteDocument = {
   sourceFilename: string | null;
   sourceSizeBytes: number | null;
   uploadedAt: string;
-  status: 'PENDING_EXTRACTION' | 'EXTRACTING' | 'EXTRACTED' | 'FAILED';
+  /** MANUAL means a person typed it in and there is no source document (0015). */
+  status: 'PENDING_EXTRACTION' | 'EXTRACTING' | 'EXTRACTED' | 'FAILED' | 'MANUAL';
 };
 
 export type AgentEvent = {

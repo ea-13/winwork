@@ -11,6 +11,10 @@ type Message = {
 
 type Thread = { id: string; title: string };
 type ProjectDoc = { id: string; filename: string; kind: string };
+type Division = { code: string; title: string };
+
+/** Every trade, plus the one that means "do not narrow it". */
+const GENERAL = '__general__';
 
 /**
  * Ask an expert, from wherever you are.
@@ -29,12 +33,20 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [documents, setDocuments] = useState<ProjectDoc[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [division, setDivision] = useState<string>(GENERAL);
+  const [docsOpen, setDocsOpen] = useState(false);
   const [attached, setAttached] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<'EXPERT' | 'DOCUMENT'>('EXPERT');
   const [question, setQuestion] = useState('');
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    apiGet<Division[]>('/divisions').then(setDivisions).catch(() => setDivisions([]));
+  }, [open]);
 
   useEffect(() => {
     if (!open || !projectId) return;
@@ -70,6 +82,7 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
             projectId,
             title: text.slice(0, 60),
             documentIds: [...attached],
+            divisions: division === GENERAL ? [] : [division],
           });
           id = thread.id;
           setThreadId(id);
@@ -79,6 +92,9 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
           question: text,
           mode,
           documentIds: [...attached],
+          // General means every division, which is what an expert who has not
+          // been told a trade should reason across.
+          divisions: division === GENERAL ? [] : [division],
         });
 
         const data = await apiGet<{ thread: Thread; messages: Message[] }>(
@@ -91,7 +107,7 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
         setThinking(false);
       }
     },
-    [question, thinking, threadId, projectId, attached, mode],
+    [question, thinking, threadId, projectId, attached, mode, division],
   );
 
   if (!open) {
@@ -147,31 +163,85 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
         </div>
       </header>
 
-      {documents.length > 0 && (
-        <div className="flex flex-wrap gap-1 border-b border-slate-200 px-3 py-1.5">
-          {documents.slice(0, 8).map((document) => (
-            <button
-              key={document.id}
-              onClick={() =>
-                setAttached((current) => {
-                  const next = new Set(current);
-                  if (next.has(document.id)) next.delete(document.id);
-                  else next.add(document.id);
-                  return next;
-                })
-              }
-              className={`max-w-[10rem] truncate rounded px-1.5 py-0.5 text-[10px] ${
-                attached.has(document.id)
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-500'
-              }`}
-              title={document.filename}
-            >
-              {document.filename}
-            </button>
+      <div className="flex items-center gap-2 border-b border-ink-200 px-3 py-1.5">
+        {/* The trade, or General. The expert reasons across every division when
+            you have not narrowed it, which is the honest default — most
+            questions are not about one trade. */}
+        <select
+          value={division}
+          onChange={(event) => setDivision(event.target.value)}
+          className="min-w-0 flex-1 rounded border border-ink-300 px-1.5 py-1 text-[11px] outline-none focus:border-ink-800"
+          title="Which trade should the expert reason as?"
+        >
+          <option value={GENERAL}>General — all trades</option>
+          {divisions.map((entry) => (
+            <option key={entry.code} value={entry.code}>
+              {entry.code} · {entry.title}
+            </option>
           ))}
+        </select>
+
+        {/* Documents as a multi-select of everything on this project, rather
+            than the first eight as chips. A bid set is forty files and the one
+            you want is rarely in the first eight. */}
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setDocsOpen((value) => !value)}
+            disabled={documents.length === 0}
+            className="rounded border border-ink-300 px-2 py-1 text-[11px] text-ink-700 disabled:opacity-40"
+            title={documents.length === 0 ? 'No documents on this project yet' : 'Attach documents'}
+          >
+            {attached.size > 0 ? `${attached.size} doc${attached.size === 1 ? '' : 's'}` : 'Docs'} ▾
+          </button>
+
+          {docsOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setDocsOpen(false)} />
+              <div className="absolute bottom-full right-0 z-50 mb-1 max-h-72 w-72 overflow-y-auto rounded-lg border border-ink-200 bg-white py-1 shadow-lg">
+                <div className="flex items-center justify-between px-2 py-1">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                    {documents.length} file{documents.length === 1 ? '' : 's'}
+                  </span>
+                  {attached.size > 0 && (
+                    <button
+                      onClick={() => setAttached(new Set())}
+                      className="text-[10px] text-ink-400 hover:text-ink-700"
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+                {documents.map((document) => (
+                  <label
+                    key={document.id}
+                    className="flex cursor-pointer items-start gap-2 px-2 py-1 text-[11px] hover:bg-ink-50"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={attached.has(document.id)}
+                      onChange={() =>
+                        setAttached((current) => {
+                          const next = new Set(current);
+                          if (next.has(document.id)) next.delete(document.id);
+                          else next.add(document.id);
+                          return next;
+                        })
+                      }
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-ink-800">{document.filename}</span>
+                      <span className="text-[10px] text-ink-400">
+                        {String(document.kind).toLowerCase()}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {messages.length === 0 && (

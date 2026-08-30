@@ -371,7 +371,7 @@ async function draftFromSpec(
           `full document, so cite pages from ${batch.firstPage} onwards.` +
           (divisions.length > 0 ? ` Limit to CSI divisions ${divisions.join(', ')}.` : ''),
         maxTokens: 48000,
-        thinkingBudget: 6000,
+        effort: 'low',
       });
 
       for (const item of value.items) {
@@ -479,8 +479,9 @@ async function draftFromDrawing(
           'Cite the sheet number from that list, never a page number.' +
           (divisions.length > 0 ? ` Limit to CSI divisions ${divisions.join(', ')}.` : ''),
         maxTokens: 48000,
-        // Reading is the easy part here; writing it all down is the long part.
-        thinkingBudget: 6000,
+        // Reading is the easy part here; writing it all down is the long part,
+        // and the two share one budget.
+        effort: 'low',
       });
 
       for (const item of value.items) {

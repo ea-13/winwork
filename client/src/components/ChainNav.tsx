@@ -15,7 +15,9 @@ export type ChainSummary = {
 export type ChainStep = 'documents' | 'scope' | 'bids' | 'leveling' | 'buyout';
 
 /** Which steps live on the project, and which need a package chosen first. */
-const PROJECT_STEPS: ChainStep[] = ['documents', 'scope', 'buyout'];
+// Bids and leveling exist at BOTH levels: a summary across packages on the
+// project, the detail inside one. Nothing is gated on choosing a package.
+const PROJECT_STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'leveling', 'buyout'];
 
 const LABEL: Record<ChainStep, string> = {
   documents: 'Documents',
@@ -120,25 +122,22 @@ export function ChainNav({
     }
   };
 
+  /** Steps a package page can render itself. */
+  const PACKAGE_STEPS: ChainStep[] = ['bids', 'leveling'];
+
   const go = (step: ChainStep) => {
-    const isProjectStep = PROJECT_STEPS.includes(step);
-
-    if (isProjectStep) {
-      if (onSelectProjectStep) onSelectProjectStep(step);
-      else navigate(`/projects/${projectId}?step=${step}`);
-      return;
-    }
-
-    if (packageId) {
+    // Inside a package, bids and leveling stay inside it — clicking them should
+    // show this package's detail, not throw you back to the project summary.
+    if (packageId && PACKAGE_STEPS.includes(step)) {
       if (onSelectPackageStep) onSelectPackageStep(step);
       else navigate(`/packages/${packageId}?step=${step}`);
       return;
     }
 
-    // A package step with no package chosen. Send them where the choice is
-    // made rather than doing nothing.
-    if (onSelectProjectStep) onSelectProjectStep('scope');
-    else navigate(`/projects/${projectId}?step=scope`);
+    // Everything else lives on the project. From inside a package that means
+    // navigating out, which is what the user asked for by clicking it.
+    if (onSelectProjectStep) onSelectProjectStep(step);
+    else navigate(`/projects/${projectId}?step=${step}`);
   };
 
   const steps: ChainStep[] = ['documents', 'scope', 'bids', 'leveling', 'buyout'];
@@ -149,8 +148,9 @@ export function ChainNav({
         {steps.map((step, index) => {
           const { count, hint } = detail(step);
           const isActive = step === active;
-          const needsPackage = !PROJECT_STEPS.includes(step);
-          const unreachable = needsPackage && !packageId;
+          // Nothing is unreachable any more; kept as a constant so the styling
+          // below reads the same as it did.
+          const unreachable = false;
 
           return (
             <li key={step} className="flex items-stretch">

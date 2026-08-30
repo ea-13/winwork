@@ -55,15 +55,21 @@ export async function extractStructured<T extends z.ZodType>(options: {
   pdf?: Buffer;
   maxTokens?: number;
   /**
-   * How much of the budget may go to thinking.
+   * How hard to think, relative to how much there is to write down.
    *
-   * Adaptive is right when the hard part is judgement — deciding whether a
-   * quote line means a scope item. It is wrong when the hard part is VOLUME:
-   * reading two dense drawings produces a long structured answer, and adaptive
-   * thinking spent 44k of a 48k budget reasoning and then truncated the answer
-   * mid-string. Capping it leaves the budget where the work actually is.
+   * Thinking and output share one budget. When the hard part is JUDGEMENT —
+   * does this quote line mean that scope item — thinking earns its share. When
+   * the hard part is VOLUME, it does not: reading two dense drawings produces a
+   * long structured answer, and letting reasoning take 44k of a 48k budget
+   * truncated the answer mid-string and lost the whole batch.
+   *
+   * This is `output_config.effort`, not a token budget. The explicit
+   * `thinking: { type: 'enabled', budget_tokens }` form is rejected by this
+   * model with a 400 telling you to use effort instead — which is exactly what
+   * happened the first time this ran, so it is written down here rather than
+   * rediscovered.
    */
-  thinkingBudget?: number | 'adaptive';
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 }): Promise<StructuredResult<z.infer<T>>> {
   const content: Anthropic.ContentBlockParam[] = [];
 
@@ -88,17 +94,15 @@ export async function extractStructured<T extends z.ZodType>(options: {
   // drawings needs both the budget and the time, and streaming is how you get
   // them. `finalMessage()` still carries `parsed_output`, so the structured
   // guarantee is unchanged.
-  const budget = options.thinkingBudget ?? 'adaptive';
-
   const stream = getClient().messages.stream({
     model: MODEL,
     max_tokens: options.maxTokens ?? 16000,
     system: options.system,
-    thinking:
-      budget === 'adaptive'
-        ? { type: 'adaptive' }
-        : { type: 'enabled', budget_tokens: budget },
-    output_config: { format: zodOutputFormat(options.schema) },
+    thinking: { type: 'adaptive' },
+    output_config: {
+      format: zodOutputFormat(options.schema),
+      ...(options.effort ? { effort: options.effort } : {}),
+    },
     messages: [{ role: 'user', content }],
   });
 

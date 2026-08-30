@@ -541,3 +541,171 @@ quotesRouter.post('/quotes/:quoteId/allocations', requireRole('BC', 'EST'), asyn
     balanced: total === null ? null : Math.abs(total - allocated) < 0.005,
   });
 });
+
+// -----------------------------------------------------------------------------
+// Reading a bid, and putting it into the project
+// -----------------------------------------------------------------------------
+
+/** Everything read out of one bid, for review before it is published. */
+quotesRouter.get('/quotes/:quoteId/read', async (req, res) => {
+  const quoteId = req.params.quoteId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: quote } = await db
+    .from('quote')
+    .select('id, package_id, quoted_total, status, subcontractor_id, source_filename')
+    .eq('id', quoteId)
+    .maybeSingle();
+
+  if (!quote) {
+    res.status(404).json({ error: 'No such quote' });
+    return;
+  }
+
+  const { data: packageScope } = await db
+    .from('package_scope')
+    .select('scope_item_id')
+    .eq('package_id', quote.package_id);
+
+  const scopeIds = (packageScope ?? []).map((row) => row.scope_item_id as string);
+
+  const [{ data: lines }, { data: exclusions }, { data: terms }, { data: scopeItems }, { data: sub }] =
+    await Promise.all([
+      db
+        .from('quote_line')
+        .select('id, description, original_text, qty, unit, line_total, scope_item_id, is_lumped, match_basis')
+        .eq('quote_id', quoteId)
+        .order('id'),
+      db
+        .from('quote_exclusion')
+        .select('id, excerpt, source_location')
+        .eq('quote_id', quoteId),
+      db.from('quote_term').select('id, term_key, term_value').eq('quote_id', quoteId),
+      scopeIds.length
+        ? db.from('scope_item').select('id, scope_id, title').in('id', scopeIds).order('scope_id')
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      quote.subcontractor_id
+        ? db.from('subcontractor').select('name').eq('id', quote.subcontractor_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+  // Published means promoted rows exist. Lines only appear here once the
+  // extraction has been accepted, so their presence IS the published state —
+  // there is no separate flag to drift out of sync with reality.
+  const published = (lines ?? []).length > 0 || (exclusions ?? []).length > 0;
+
+  res.json({
+    quote: {
+      id: quote.id,
+      quotedTotal: quote.quoted_total,
+      status: quote.status,
+      bidder: (sub?.name as string | null) ?? (quote.source_filename as string | null) ?? null,
+    },
+    lines: lines ?? [],
+    exclusions: exclusions ?? [],
+    terms: terms ?? [],
+    scopeItems: scopeItems ?? [],
+    published,
+  });
+});
+
+/**
+ * Puts a read bid into the project.
+ *
+ * One press for what used to be three buttons: accept the extraction, match the
+ * lines to the scope baseline, accept the matching. They were separate because
+ * they are separate operations, and separate is how they were shown — but
+ * nobody accepts an extraction and then declines to use it, so making a person
+ * press three things in the right order was ceremony, not safety.
+ *
+ * The safety is unchanged: this is still H5, it still requires a written
+ * rationale, and the approval and audit rows are the same ones. What went away
+ * was the requirement to know our vocabulary.
+ *
+ * The matching pass is best-effort. If it fails, the extraction is still
+ * published and the lines are simply unmatched — an estimator can set them by
+ * hand in the same pane, and losing accepted extraction because a second model
+ * call failed would be the worse outcome.
+ */
+quotesRouter.post('/quotes/:quoteId/publish', requireRole('EST', 'BC'), async (req, res) => {
+  const quoteId = req.params.quoteId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  // readRationale answers the request itself when there is none, so a missing
+  // rationale never reaches the promotion path.
+  const rationale = readRationale(req, res);
+  if (!rationale) return;
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: quote } = await db
+    .from('quote')
+    .select('id, package_id, status')
+    .eq('id', quoteId)
+    .maybeSingle();
+
+  if (!quote) {
+    res.status(404).json({ error: 'No such quote' });
+    return;
+  }
+
+  // A manual bid has nothing to promote — it was typed, not read. It is already
+  // in the project the moment it exists, and the scope-level numbers are entered
+  // on the bid tab.
+  if (quote.status === 'MANUAL') {
+    res.json({
+      published: true,
+      note: 'This bid was entered by hand, so there is nothing to accept. Break it down per scope item on the Leveling step.',
+    });
+    return;
+  }
+
+  const { data: run } = await db
+    .from('agent_run')
+    .select('id')
+    .eq('agent_type', 'extract_quote')
+    .eq('input_ref', quoteId)
+    .eq('status', 'DONE')
+    .order('finished_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!run) {
+    res.status(400).json({
+      error: 'This bid has not been read yet. Press "Read the bid" first.',
+    });
+    return;
+  }
+
+  try {
+    const result = await promoteExtraction(db, {
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      quoteId,
+      runId: run.id as string,
+    });
+
+    res.json({
+      published: true,
+      ...result,
+      rationale,
+      // Matching runs next, from the client, so the pane can show it happening.
+      note:
+        result.quoteLines === 0
+          ? 'Accepted. No priced lines were found, which is normal on a lump-sum quote — it still levels on the total.'
+          : `Accepted ${result.quoteLines} line(s) and ${result.exclusions} exclusion(s).`,
+    });
+  } catch (caught) {
+    res.status(400).json({ error: caught instanceof Error ? caught.message : String(caught) });
+  }
+});
