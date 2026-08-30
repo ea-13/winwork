@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { QuoteDocument } from 'shared';
 import { ActivityStream } from './ActivityStream';
 import { fileSize, money } from './Layout';
+import { SplitBid } from './SplitBid';
 import { apiGet, apiPatch, apiPost } from '../lib/api';
 
 type Line = {
@@ -46,11 +47,13 @@ type Read = {
  */
 export function BidReview({
   packageId,
+  projectId,
   document,
   onError,
   onChanged,
 }: {
   packageId: string;
+  projectId: string | null;
   document: QuoteDocument;
   onError: (message: string | null) => void;
   onChanged: () => void;
@@ -250,6 +253,15 @@ export function BidReview({
               Nothing read out of this bid yet. Press <b>Read the bid</b> — it pulls out the lines,
               the exclusions and the terms, and shows them here before anything touches the project.
             </p>
+          )}
+
+          {data && projectId && (
+            <SplitBid
+              quoteId={document.id}
+              projectId={projectId}
+              onError={onError}
+              onChanged={onChanged}
+            />
           )}
 
           {data && hasBeenRead && (

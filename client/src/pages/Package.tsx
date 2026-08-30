@@ -238,6 +238,7 @@ export function PackagePage() {
               <BidReview
                 key={document.id}
                 packageId={packageId}
+                projectId={pkg?.project_id ?? null}
                 document={document}
                 onError={setError}
                 onChanged={() => void refresh()}

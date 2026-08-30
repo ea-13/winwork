@@ -220,7 +220,7 @@ projectsRouter.get('/projects/:projectId/scope-items', async (req, res) => {
     .from('scope_item')
     .select(
       'id, scope_id, csi_division, csi_section, title, description, unit, quantity, ' +
-        'quantity_basis, is_locked, locked_at',
+        'quantity_basis, cost_code_id, is_locked, locked_at',
     )
     .eq('project_id', req.params.projectId)
     .order('csi_division')
@@ -295,7 +295,7 @@ projectsRouter.post('/projects/:projectId/scope-items', requireRole('EST', 'BC')
     })
     .select(
       'id, scope_id, csi_division, csi_section, title, description, unit, quantity, ' +
-        'quantity_basis, is_locked, locked_at',
+        'quantity_basis, cost_code_id, is_locked, locked_at',
     )
     .single();
 

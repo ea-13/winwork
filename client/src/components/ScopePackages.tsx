@@ -17,6 +17,7 @@ type ScopeItem = {
   unit: string | null;
   quantity: number | null;
   quantity_basis: string | null;
+  cost_code_id: string | null;
   is_locked: boolean;
 };
 
@@ -64,6 +65,7 @@ export function ScopePackages({
   const [items, setItems] = useState<ScopeItem[]>([]);
   const [packages, setPackages] = useState<WorkPackage[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
+  const [costCodes, setCostCodes] = useState<{ id: string; code: string; description: string }[]>([]);
   const [assignment, setAssignment] = useState<Record<string, string>>({});
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
@@ -87,10 +89,11 @@ export function ScopePackages({
   } | null>(null);
 
   const load = useCallback(async () => {
-    const [scope, pkgs, divs] = await Promise.all([
+    const [scope, pkgs, divs, codes] = await Promise.all([
       apiGet<ScopeItem[]>(`/projects/${projectId}/scope-items`),
       apiGet<WorkPackage[]>(`/projects/${projectId}/packages`),
       apiGet<Division[]>('/divisions'),
+      apiGet<{ id: string; code: string; description: string }[]>('/cost-codes').catch(() => []),
     ]);
 
     // Which package each scope item sits in. package_scope is many-to-many in
@@ -110,6 +113,7 @@ export function ScopePackages({
     setItems(scope);
     setPackages(pkgs);
     setDivisions(divs);
+    setCostCodes(codes);
     setAssignment(map);
   }, [projectId]);
 
@@ -138,7 +142,7 @@ export function ScopePackages({
 
   const packageById = useMemo(
     () => new Map(packages.map((pkg) => [pkg.id, pkg])),
-    [packages],
+    [packages, costCodes],
   );
 
   /** Scope sorted so each package's items are contiguous, unassigned last. */
@@ -173,6 +177,8 @@ export function ScopePackages({
       { key: 'unit', label: 'Unit', width: 80, type: 'select', options: UNITS },
       { key: 'quantity', label: 'Qty', width: 100, type: 'number' },
       { key: 'quantity_basis', label: 'Basis', width: 220 },
+      { key: 'cost_code', label: 'Cost code', width: 130, type: 'select',
+        options: ['', ...costCodes.map((code) => code.code)] },
       { key: 'package', label: 'Package', width: 170, type: 'select',
         options: ['', ...packages.map((pkg) => pkg.name)] },
     ],
@@ -184,8 +190,9 @@ export function ScopePackages({
       visible.map((item) => ({
         ...item,
         package: packageById.get(assignment[item.id] ?? '')?.name ?? '',
+        cost_code: costCodes.find((code) => code.id === item.cost_code_id)?.code ?? '',
       })) as unknown as GridRow[],
-    [visible, assignment, packageById],
+    [visible, assignment, packageById, costCodes],
   );
 
   const commit = useCallback(
@@ -218,6 +225,13 @@ export function ScopePackages({
         if (Object.keys(patch).length === 0) return;
       }
 
+      if ('cost_code' in patch) {
+        const wanted = String(patch.cost_code ?? '').trim();
+        const code = costCodes.find((entry) => entry.code === wanted);
+        delete patch.cost_code;
+        patch.cost_code_id = code?.id ?? null;
+      }
+
       if (item.is_locked) {
         throw new Error('This scope item is locked. Unlocking is a gate crossing, not an edit.');
       }
@@ -228,7 +242,7 @@ export function ScopePackages({
       );
       setItems((current) => current.map((row) => (row.id === rowId ? { ...row, ...record } : row)));
     },
-    [items, packages, assignment],
+    [items, packages, assignment, costCodes],
   );
 
   /**
