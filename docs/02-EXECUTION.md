@@ -41,7 +41,7 @@ P21–P28 are work that came out of real use and had no number before.
 | **P8** | Normalisation | ✅ | Ambiguous below 0.7 goes to a human |
 | **P9** | Add-back estimation | ✅ | COMPARABLE_BIDS → BENCHMARK → TBC |
 | **P10** | Scope gap detection | ✅ | Set difference, severity derived |
-| **P11** | Leveling matrix | ✅ | Both rankings shown side by side |
+| **P11** | Leveling matrix | 🔸 | Both rankings shown side by side. **The flip itself has never been observed** — see L17 |
 | **P27** | Buyout log | ✅ | Variance measured on adjusted |
 | **P12** | Risk log and export | ✅ | XLSX; uncalibrated suppressed (R5) |
 | **P13** | Division Experts | 🔸 | Consult agent built; **stub content, real playbooks missing** |
@@ -54,7 +54,7 @@ P21–P28 are work that came out of real use and had no number before.
 | **P14** | Change-order archaeology | ⏸ | Parked — needs a closed job's change orders |
 | **P29–P34** | The walkthrough build | ✅ | Chain nav, uploads, drawings→scope, packages, bid tab, context |
 | **P35–P39** | Restructure and first real run | ✅ | Five steps, Excel grid, scope template, real plan set indexed |
-| **P11** | Leveling matrix | ✅✅ | **Completed 2026-08-30** — weights, scoring, H6 selection. Was marked done without them |
+| **P11** | Leveling matrix | 🔸 | **2026-08-30** — weights, scoring, H6 selection added; it had been marked done without them. Still 🔸: its acceptance bar is the ranking flip, and that needs line-level bids. See **L17** |
 | **P40–P44** | Manual path, workspaces, cost codes | ✅ | Manual bids, blank rows, multi-tenant, cost codes, split bids |
 | **P45–P48** | AI-native surface | ✅ | Copilot suggestions, A10 coverage audit, A11 bid comparison, A12 cost-code mapper |
 | **P49** | Project assistant | ✅ | Chat with tools over the real project. Reads anything; writes no state |
@@ -263,12 +263,30 @@ is computed from exposure and confidence, never authored.
 
 **Verify:** the planted `07-14` firestopping gap appears as **UNCOVERED / CRITICAL**.
 
-## P11 · Leveling matrix ✅ — the flip
+## P11 · Leveling matrix 🔸 — built, and the flip is still unproven
 Scope items down, bidders across. Quoted totals, add-backs, risk allowance, adjusted totals.
 **Rank on adjusted, never on quoted.** Owner-set weights: price 30, scope 25, risk 20, commercial
 15, programme 10 — editable, so an estimator can re-weight and watch the ranking move.
 
 **Verify:** the quoted-versus-adjusted ranking flip is unmistakable.
+
+**That bar has never been cleared, and this section said ✅ anyway.** Twice now.
+The first time P11 was marked done without the weights its own acceptance
+criterion asked for. This is the same mistake wearing a different hat: the
+mechanism is built, tested and correct, and the thing the criterion actually
+demands — watching a ranking reorder — has not once been observed, because the
+only bids in the system are lump sums.
+
+Three lump-sum totals rank. They cannot reorder, no matter what the add-back
+logic does, because there is nothing to add back to: an add-back needs a priced
+line to attach to, and a single number has none. Every add-back computed against
+the current data has come out zero, which is arithmetically right and
+demonstrates nothing.
+
+What clears it: **two or more bids carrying line-level pricing on the same scope
+items, where one excludes something the others priced.** Then the adjusted
+ranking moves and the criterion is met. Until then this is 🔸 and the demo shows
+the mechanism, not the reversal. See **L17**.
 
 ## P27 · Buyout log ✅
 Per-division buyout against budget: budget, allowances carried, contingency carried, selected
@@ -376,6 +394,11 @@ enough" is a judgement only Elie can make.
 
 Replit is not needed until the first live demo. Deploy once P11 lands, so the first deployed version
 is one that can show the flip.
+
+**Superseded 2026-08-31.** It is deployed and matching local, and it still cannot
+show the flip — P11 shipped without clearing that half of its bar. Deploying
+early was right; the note above just should not be read as evidence the flip
+works. See **L17**.
 
 ---
 
@@ -509,7 +532,13 @@ pattern that should come out of the knowledge base.
 
 # Where we stand
 
-**As of 2026-08-31 · roughly 87% of a presentable MVP.**
+**As of 2026-08-31 · roughly 85% of a presentable MVP.**
+
+Down from the 87% written earlier today, and the number went down because the
+record got more honest rather than because anything broke. P11 was carrying a ✅
+against an acceptance bar it has never cleared — see **L17** — and a build record
+that grades itself generously is worse than no build record, because it is the
+one thing you cannot check by reading the code.
 
 Read this and the list below before anything else. `npm run resume` points here.
 
@@ -531,8 +560,8 @@ Everything else on the open list is a day's work each.
 
 | | |
 |---|---|
-| **Complete** | P0–P12, P15–P28, P29–P49 |
-| **Partial** | **P13** division experts — agent built, playbook content is stubs · **P17** autopilot — narrowed deliberately, see that section · **P20** hardening — isolation sweep and bundle check done, rate limits open |
+| **Complete** | P0–P10, P12, P15–P28 (except P11), P29–P49 |
+| **Partial** | **P11** leveling — built and correct; its acceptance bar is the ranking flip and that has never been observed (**L17**) · **P13** division experts — agent built, playbook content is stubs · **P17** autopilot — narrowed deliberately, see that section · **P20** hardening — isolation sweep and bundle check done, rate limits open |
 | **P14** | No longer parked. API, screen and QA are done; it is waiting on data |
 | **Scale** | 22 migrations · 24 route files · 11 agents · 32 screens and components · 25 template divisions |
 
@@ -562,18 +591,33 @@ morning where nothing works and nobody can say why.
 
 ## Next steps, in the order to take them
 
-1. **Import to Replit and confirm 1:1.** Elie runs this; it has matched local
-   every time so far but the check is cheap and the failure is expensive.
-2. **Load real demo data.** L1 and L2 will surface failures that no amount of
-   building finds. This is the highest-value next action by a wide margin.
-3. **L15, then L4.** A day each, and both are the same complaint already made
+1. **Line-level bids on one package (L17).** Everything else on this list is
+   worth less than this. It clears P11's acceptance bar, it is the demo, and it
+   is the only one of these that cannot be worked around by being good in the
+   room. Two bids on the same scope items is enough — it does not need four.
+2. **One closed job through Hindsight (L16).** Unlocks the outreach claim, and
+   it is the cheapest thing to ask a prospect for.
+3. **Load the rest of the real demo data.** L1 and L2 will surface failures no
+   amount of building finds.
+4. **L15, then L4.** A day each, and both are the same complaint already made
    once: a proposal you have to leave the table to look at is a proposal nobody
    looks at, and every table should be the grid.
-4. **Rate limiting (L7)** before this is exposed to anyone outside the building.
+5. **Rate limiting (L7)** before this is exposed to anyone outside the building.
 
-Deferred by Elie's own choice, and correctly: line-level bid data (three lump
-sums rank but never reorder — the flip needs comparable priced lines), and real
-division-expert playbooks.
+**The two things that are not features, and are not optional.** Both were
+deferred by Elie's own choice, correctly, while there was building to do. That
+window has closed — the building is done and these are now what stands between
+this and a sellable demo:
+
+- **L17 · the flip.** Line-level bid data. Without it P11's acceptance bar is
+  unmet and the demo shows a mechanism rather than a reversal.
+- **L16 · the backtest.** One closed job's change orders. Without it there is no
+  catch rate, and no honest number to put in front of anybody.
+
+Still genuinely deferred: real division-expert playbooks. As a service Elie's own
+expertise fills that gap on every engagement — which is fine, and is also the
+thing that does not scale. Not urgent for the first three clients; blocking by
+the tenth.
 
 ---
 
@@ -586,6 +630,7 @@ read when picking the build back up, and `npm run resume` points at it.
 
 | | What | Why it matters |
 |---|---|---|
+| **L17** | **The flip has never been observed.** P11's own acceptance bar — "the quoted-versus-adjusted ranking flip is unmistakable" — is unmet | The single most persuasive thing this product does, and the reason anyone believes the rest of it. Needs 2+ bids with line-level pricing on the same scope items where one excludes what the others priced. Three lump sums rank and never reorder. **Highest priority; Elie is collecting the data.** |
 | **L1** | Drawing→scope still loses a batch to output truncation on a real stamped set | Batch isolation means the run survives it, but ~8% of sheets go unread. `effort: 'low'` is the current mitigation and has not been tested across a full 13-batch run |
 | **L2** | Spec-side drafting has never run on a real specification | Every fix so far came from drawings. A 200-page text spec is a different shape and will have its own failure |
 | **L4** | `Solicitation` still carries a hand-rolled table | Scope, buyout and the bid tab are on the grid. Solicitation is the last one that is not |
