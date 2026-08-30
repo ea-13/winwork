@@ -26,6 +26,7 @@ import { recordsRouter } from './routes/records.js';
 import { sessionRouter } from './routes/session.js';
 import { solicitationRouter } from './routes/solicitation.js';
 import { subsRouter } from './routes/subs.js';
+import { tableCommandRouter } from './routes/table-command.js';
 import { workspacesRouter } from './routes/workspaces.js';
 
 const app = express();
@@ -47,6 +48,7 @@ app.use('/api', requireAuth, quotesRouter);
 app.use('/api', requireAuth, levelingRouter);
 app.use('/api', requireAuth, buyoutRouter);
 app.use('/api', requireAuth, subsRouter);
+app.use('/api', requireAuth, tableCommandRouter);
 app.use('/api', requireAuth, workspacesRouter);
 app.use('/api', requireAuth, solicitationRouter);
 app.use('/api', requireAuth, autopilotRouter);

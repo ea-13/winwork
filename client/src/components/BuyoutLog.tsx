@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Grid, type GridColumn, type GridRow } from './Grid';
 import { BidTab } from './BidTab';
 import { LevelingMatrix } from './LevelingMatrix';
+import { TableCommand } from './TableCommand';
 import { apiGet, apiPatch, apiPost } from '../lib/api';
 import { money } from './Layout';
 
@@ -412,6 +413,37 @@ export function BuyoutLog({
           is an allowance, a contingency, or accepted in writing, the total below is optimistic.
         </p>
       )}
+
+      {/* The grid shows display names (budget) while the whitelist is keyed on
+          database columns (budget_amount). The command has to speak the second
+          language or the server filters every field away as not editable. */}
+      <TableCommand
+        table="work_package"
+        rows={rows.map((row) => ({
+          id: row.packageId,
+          name: row.name,
+          lead_division: row.division,
+          budget_amount: row.budget,
+          allowance_amount: row.allowance,
+          contingency_amount: row.contingency,
+          notes: row.notes,
+          // Read-only context so an instruction can say "the ones with gaps"
+          // without the model being able to write these.
+          openGaps: row.openGaps,
+          adjustedTotal: row.adjustedTotal,
+        })) as unknown as GridRow[]}
+        columns={[
+          { key: 'name', label: 'Package' },
+          { key: 'lead_division', label: 'Division' },
+          { key: 'budget_amount', label: 'Budget', type: 'currency' },
+          { key: 'allowance_amount', label: 'Allowance', type: 'currency' },
+          { key: 'contingency_amount', label: 'Contingency', type: 'currency' },
+          { key: 'notes', label: 'Notes' },
+        ]}
+        onApplied={() => void load()}
+        onError={onError}
+        placeholder='Tell it what to change — "carry 5% contingency on every package with open gaps"'
+      />
 
       <Grid
         columns={columns}

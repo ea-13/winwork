@@ -5,6 +5,7 @@ import { Grid, type GridColumn, type GridRow } from './Grid';
 import { money } from './Layout';
 import { PendingDrafts } from './PendingDrafts';
 import { ScopeContext } from './ScopeContext';
+import { TableCommand } from './TableCommand';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
 
 type ScopeItem = {
@@ -599,6 +600,23 @@ export function ScopePackages({
           ))}
         </div>
       )}
+
+      {/* Say what you want changed rather than clicking every cell. The diff
+          is always shown before anything is written. */}
+      <TableCommand
+        table="scope_item"
+        rows={rows}
+        // csi_division and package are how an estimator actually describes a
+        // set of rows ("the plumbing ones"), so they have to be visible even
+        // though package is not directly writable here.
+        columns={[
+          { key: 'csi_division', label: 'Div' },
+          ...columns,
+        ]}
+        onApplied={() => void load().then(() => onChanged?.())}
+        onError={onError}
+        placeholder='Tell it what to change — "set every division 22 basis to per fixture schedule"'
+      />
 
       <Grid
         columns={columns}

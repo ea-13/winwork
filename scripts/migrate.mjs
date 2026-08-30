@@ -51,7 +51,15 @@ const applied = new Map(rows.map((r) => [r.filename, r.checksum]));
 let count = 0;
 for (const file of files) {
   const sql = readFileSync(join(dir, file), 'utf8');
-  const checksum = createHash('sha256').update(sql).digest('hex').slice(0, 16);
+
+  // Hash the NORMALISED text. Git rewrites line endings on checkout — CRLF on
+  // Windows, LF on Linux — so hashing the bytes as they sit on disk means a
+  // file committed on one machine looks modified on the other, and the
+  // "an applied migration is history" guard fires on a file nobody touched.
+  // That is a false alarm that teaches people to bypass the guard, which is
+  // worse than not having it.
+  const normalised = sql.replace(/\r\n/g, '\n');
+  const checksum = createHash('sha256').update(normalised).digest('hex').slice(0, 16);
   const previous = applied.get(file);
 
   if (previous === checksum) {
