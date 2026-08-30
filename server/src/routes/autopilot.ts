@@ -3,6 +3,7 @@ import { CONSULT_PROMPT_VERSION } from '../agents/division-consult.js';
 import { PROMPT_VERSION as EXTRACT_PROMPT_VERSION } from '../agents/extract-quote.js';
 import { MODEL } from '../lib/anthropic.js';
 import { requireRole } from '../lib/auth.js';
+import { promoteContextDrafts, promoteScopeDrafts } from '../lib/promote.js';
 import { supabaseForUser } from '../lib/supabase.js';
 
 export const autopilotRouter = Router();
@@ -127,7 +128,7 @@ autopilotRouter.get('/review-queue', async (req, res) => {
     db
       .from('audit_event')
       .select('after, at, actor_id')
-      .in('action', ['PROMOTE_EXTRACTION', 'PROMOTE_NORMALISATION']),
+      .in('action', ['PROMOTE_EXTRACTION', 'PROMOTE_NORMALISATION', 'PROMOTE_SCOPE', 'PROMOTE_CONTEXT']),
   ]);
 
   const promoted = new Set(
@@ -159,3 +160,106 @@ autopilotRouter.get('/review-queue', async (req, res) => {
     awaiting: groups.filter((group) => !group.accepted).length,
   });
 });
+
+/**
+ * Accepts a scope-drafting run into the project's baseline.
+ *
+ * Deliberately not automatic. A drafter that wrote straight into the scope of
+ * work would be an agent writing canonical state, which is the one thing R2
+ * forbids — and the baseline is the thing every bid is measured against, so it
+ * is the last place to relax that.
+ */
+autopilotRouter.post('/runs/:runId/promote-scope', requireRole('EST', 'BC'), async (req, res) => {
+  const runId = req.params.runId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const rationale =
+    typeof (req.body ?? {}).rationale === 'string' ? String(req.body.rationale).trim() : '';
+  if (rationale === '') {
+    res.status(400).json({ error: 'A rationale is required to accept drafted scope.' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: run } = await db
+    .from('agent_run')
+    .select('id, project_id, agent_type, status')
+    .eq('id', runId)
+    .maybeSingle();
+
+  if (!run) {
+    res.status(404).json({ error: 'No such run' });
+    return;
+  }
+  if (!run.project_id) {
+    res.status(400).json({ error: 'That run is not attached to a project' });
+    return;
+  }
+
+  try {
+    const result = await promoteScopeDrafts(db, {
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      projectId: run.project_id as string,
+      runId,
+    });
+
+    await db.from('approval').insert({
+      tenant_id: auth.tenantId,
+      gate: 'H2',
+      actor_id: auth.userId,
+      rationale,
+      target_table: 'scope_item',
+      target_id: run.project_id,
+    });
+
+    res.json({
+      ...result,
+      note:
+        result.skippedLocked > 0
+          ? `${result.skippedLocked} locked item(s) were left alone. Unlocking is a gate crossing, not a re-draft.`
+          : null,
+    });
+  } catch (caught) {
+    res.status(400).json({ error: caught instanceof Error ? caught.message : String(caught) });
+  }
+});
+
+/** Accepts a context-drafting run onto its scope items. */
+autopilotRouter.post(
+  '/runs/:runId/promote-context',
+  requireRole('EST', 'BC'),
+  async (req, res) => {
+    const runId = req.params.runId ?? '';
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const rationale =
+      typeof (req.body ?? {}).rationale === 'string' ? String(req.body.rationale).trim() : '';
+    if (rationale === '') {
+      res.status(400).json({ error: 'A rationale is required to accept drafted context.' });
+      return;
+    }
+
+    const db = supabaseForUser(auth.token);
+
+    try {
+      const result = await promoteContextDrafts(db, {
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        runId,
+      });
+      res.json(result);
+    } catch (caught) {
+      res.status(400).json({ error: caught instanceof Error ? caught.message : String(caught) });
+    }
+  },
+);

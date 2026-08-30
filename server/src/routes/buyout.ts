@@ -8,7 +8,9 @@ type Package = {
   id: string;
   name: string;
   lead_division: string | null;
+  csi_divisions: string[] | null;
   status: string;
+  notes: string | null;
   budget_amount: number | null;
   allowance_amount: number | null;
   contingency_amount: number | null;
@@ -24,6 +26,11 @@ type Package = {
  * package bought at $503k that carries $81k of uncosted exclusions has not come
  * in under budget, and a buyout log that says otherwise is the spreadsheet this
  * product exists to replace.
+ *
+ * It is a report, not a worksheet. Every gap nobody priced comes back with it,
+ * because the number at the bottom of a buyout log is only defensible if the
+ * things nobody carried are sitting underneath it — either priced as an
+ * allowance, held as contingency, or accepted in writing.
  */
 buyoutRouter.get('/projects/:projectId/buyout', async (req, res) => {
   const projectId = req.params.projectId ?? '';
@@ -37,7 +44,9 @@ buyoutRouter.get('/projects/:projectId/buyout', async (req, res) => {
 
   const { data: packages } = await db
     .from('work_package')
-    .select('id, name, lead_division, status, budget_amount, allowance_amount, contingency_amount')
+    .select(
+      'id, name, lead_division, csi_divisions, status, notes, budget_amount, allowance_amount, contingency_amount',
+    )
     .eq('project_id', projectId)
     .order('lead_division');
 
@@ -50,14 +59,28 @@ buyoutRouter.get('/projects/:projectId/buyout', async (req, res) => {
   const [{ data: leveling }, { data: gaps }, { data: selections }, { data: quotes }, { data: subs }] =
     await Promise.all([
       db.from('leveling_result').select('*').in('package_id', packageIds),
-      db.from('scope_gap').select('package_id, severity, exposure_amount').in('package_id', packageIds),
+      db.from('scope_gap').select('*').in('package_id', packageIds),
       db.from('selection').select('package_id, quote_id, selected_at').in('package_id', packageIds),
-      db.from('quote').select('id, package_id, subcontractor_id, quoted_total').in('package_id', packageIds),
+      db
+        .from('quote')
+        .select('id, package_id, subcontractor_id, quoted_total')
+        .in('package_id', packageIds),
       db.from('subcontractor').select('id, name'),
     ]);
 
+  const scopeIds = [...new Set((gaps ?? []).map((gap) => gap.scope_item_id as string))];
+  const { data: scopeItems } = scopeIds.length
+    ? await db
+        .from('scope_item')
+        .select('id, scope_id, csi_division, csi_section, title, unit, quantity')
+        .in('id', scopeIds)
+    : { data: [] as Record<string, unknown>[] };
+
   const subName = new Map((subs ?? []).map((row) => [row.id as string, row.name as string]));
   const quoteById = new Map((quotes ?? []).map((row) => [row.id as string, row]));
+  const scopeById = new Map((scopeItems ?? []).map((row) => [row.id as string, row]));
+
+  const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 } as Record<string, number>;
 
   const rows = (packages ?? []).map((pkg: Package) => {
     const selection = (selections ?? []).find((row) => row.package_id === pkg.id);
@@ -69,36 +92,89 @@ buyoutRouter.get('/projects/:projectId/buyout', async (req, res) => {
       ? results.find((row) => row.quote_id === selection.quote_id)
       : results.find((row) => row.advisory_rank === 1);
 
-    const packageGaps = (gaps ?? []).filter((row) => row.package_id === pkg.id);
-    const openExposure = packageGaps.reduce(
-      (sum, gap) => sum + Number(gap.exposure_amount ?? 0),
-      0,
-    );
+    const packageGaps = (gaps ?? [])
+      .filter((row) => row.package_id === pkg.id)
+      .map((gap) => {
+        const scope = scopeById.get(gap.scope_item_id as string);
+        return {
+          id: gap.id as string,
+          gapType: gap.gap_type as string | null,
+          severity: gap.severity as string | null,
+          exposureAmount: gap.exposure_amount as number | null,
+          exposureBasis: gap.exposure_basis as string | null,
+          detectedByRule: gap.detected_by_rule as string | null,
+          affectedCount: Array.isArray(gap.affected_quote_ids)
+            ? (gap.affected_quote_ids as unknown[]).length
+            : 0,
+          assignedType: gap.assigned_type as string | null,
+          assignedAmount: gap.assigned_amount as number | null,
+          assignedNote: gap.assigned_note as string | null,
+          assignedAt: gap.assigned_at as string | null,
+          scopeId: (scope?.scope_id as string | null) ?? null,
+          scopeTitle: (scope?.title as string | null) ?? null,
+          csiSection: (scope?.csi_section as string | null) ?? null,
+        };
+      })
+      .sort(
+        (a, b) =>
+          (severityOrder[a.severity ?? ''] ?? 9) - (severityOrder[b.severity ?? ''] ?? 9) ||
+          Number(b.exposureAmount ?? 0) - Number(a.exposureAmount ?? 0),
+      );
+
+    const sumWhere = (type: string): number =>
+      packageGaps
+        .filter((gap) => gap.assignedType === type)
+        .reduce((total, gap) => total + Number(gap.assignedAmount ?? 0), 0);
+
+    // Only gaps nobody has decided about are still open. An accepted gap has
+    // been looked at and deliberately not carried — that is a decision, not an
+    // outstanding question, and counting it as open makes the number lie.
+    const open = packageGaps.filter((gap) => gap.assignedType === null);
+
+    const gapAllowance = sumWhere('ALLOWANCE');
+    const gapContingency = sumWhere('CONTINGENCY');
 
     const quote = chosen ? quoteById.get(chosen.quote_id as string) : undefined;
     const budget = pkg.budget_amount ?? null;
     const adjusted = chosen ? Number(chosen.adjusted_total ?? 0) || null : null;
 
+    // What this package really costs: the adjusted bid plus everything carried
+    // against the scope nobody priced.
+    const committed =
+      adjusted === null && gapAllowance === 0 && gapContingency === 0
+        ? null
+        : Number(adjusted ?? 0) +
+          Number(pkg.allowance_amount ?? 0) +
+          Number(pkg.contingency_amount ?? 0) +
+          gapAllowance +
+          gapContingency;
+
     return {
       packageId: pkg.id,
       division: pkg.lead_division,
+      divisions: pkg.csi_divisions ?? [],
       name: pkg.name,
       status: pkg.status,
+      notes: pkg.notes ?? null,
       budget,
       allowance: pkg.allowance_amount ?? null,
       contingency: pkg.contingency_amount ?? null,
-      bidder:
-        quote?.subcontractor_id ? (subName.get(quote.subcontractor_id) ?? null) : null,
+      bidder: quote?.subcontractor_id ? (subName.get(quote.subcontractor_id) ?? null) : null,
       selected: Boolean(selection),
       quotedTotal: chosen ? Number(chosen.quoted_total ?? 0) || null : null,
       addbackTotal: chosen ? Number(chosen.addback_total ?? 0) : null,
       adjustedTotal: adjusted,
-      // Positive is over budget. Measured on adjusted, never on quoted.
-      variance: budget !== null && adjusted !== null ? adjusted - budget : null,
+      gapAllowance: gapAllowance || null,
+      gapContingency: gapContingency || null,
+      committed,
+      // Positive is over budget. Measured on what is actually carried, which
+      // includes the gap dispositions — anything else flatters the number.
+      variance: budget !== null && committed !== null ? committed - budget : null,
       bidderCount: results.length,
-      openGaps: packageGaps.length,
-      criticalGaps: packageGaps.filter((gap) => gap.severity === 'CRITICAL').length,
-      openExposure: openExposure || null,
+      gaps: packageGaps,
+      openGaps: open.length,
+      criticalGaps: open.filter((gap) => gap.severity === 'CRITICAL').length,
+      openExposure: open.reduce((total, gap) => total + Number(gap.exposureAmount ?? 0), 0) || null,
     };
   });
 
@@ -112,8 +188,12 @@ buyoutRouter.get('/projects/:projectId/buyout', async (req, res) => {
       allowance: sum((row) => row.allowance),
       contingency: sum((row) => row.contingency),
       adjusted: sum((row) => row.adjustedTotal),
+      gapAllowance: sum((row) => row.gapAllowance),
+      gapContingency: sum((row) => row.gapContingency),
+      committed: sum((row) => row.committed),
       variance: sum((row) => row.variance),
       openExposure: sum((row) => row.openExposure),
+      openGaps: rows.reduce((total, row) => total + row.openGaps, 0),
       criticalGaps: rows.reduce((total, row) => total + row.criticalGaps, 0),
     },
   });

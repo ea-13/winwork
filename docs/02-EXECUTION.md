@@ -52,6 +52,8 @@ P21–P28 are work that came out of real use and had no number before.
 | **P28** | Training corpus export | ✅ | JSONL, labelled ACCEPTED/CORRECTED/PENDING |
 | **P20** | Hardening | 🔸 | Isolation sweep + bundle check; **rate limits open** |
 | **P14** | Change-order archaeology | ⏸ | Parked — needs a closed job's change orders |
+| **P29–P34** | The walkthrough build | ✅ | Chain nav, uploads, drawings→scope, packages, bid tab, context |
+| **P35–P39** | Restructure and first real run | ✅ | Five steps, Excel grid, scope template, real plan set indexed |
 
 ---
 
@@ -370,3 +372,171 @@ enough" is a judgement only Elie can make.
 
 Replit is not needed until the first live demo. Deploy once P11 lands, so the first deployed version
 is one that can show the flip.
+
+---
+
+# P29–P34 · The walkthrough build
+
+Everything above was built by working forward through the plan. This block came from the opposite
+direction: sitting in front of the running app and writing down what did not work. That produced a
+different and more useful list, because three of the six items were not missing features at all —
+they were finished work with no way to reach it.
+
+| | | | |
+|---|---|---|---|
+| **P29** | The chain, made visible | ✅ | One stepper across both page levels, counts not ticks |
+| **P30** | Upload as a drop, not a form | ✅ | Real per-file progress, label afterwards |
+| **P31** | Drawings and specs into scope | ✅ | Sheet index, per-sheet citation, both read together |
+| **P32** | Packages as one long table | ✅ | Collapsible by division, notes, multi-division |
+| **P33** | The bid tab sheet | ✅ | Per scope item, per bidder, overrides survive recompute |
+| **P34** | Scope context and the learning loop | ✅ | What a line MEANS, and whether saying it worked |
+
+## What was unreachable rather than unbuilt
+
+- **The buyout log existed** and had done since P27. It sat behind a tab nothing pointed at.
+- **The scope drafter existed** — agent, endpoint, worker registration, all of it. `grep draft-scope
+  client/src` returned nothing. It had never run once.
+- **Nothing could promote a scope draft.** Even reached, the drafter's output had no path into the
+  baseline. P18 was only ever half a feature, and the half that was missing is the half that makes
+  it real.
+
+The lesson is not "wire up the buttons". It is that a step verified end-to-end at the API is not
+verified. P18's acceptance bar said "quantities only where stated", which was true and testable and
+told us nothing about whether an estimator could obtain a scope of work.
+
+## P29 · The chain, made visible ✅
+
+Documents → Scope → Packages → Bidders → Bids → Leveling → Gaps → Buyout, on every screen, with the
+package-level steps marked as needing a package.
+
+Counts, never percentages. "3 of 47 locked" says what to do next; "6% complete" says nothing anybody
+can act on. `GET /projects/:id/chain` answers the whole strip in one request.
+
+## P30 · Upload as a drop, not a form ✅
+
+Kind used to be chosen BEFORE dropping. That is backwards — a bid set arrives as one download of
+forty files and sorting it is something you do while looking at the list. Everything lands `UNFILED`
+and the kind is a dropdown in the table.
+
+Progress is per file and real, read off the request. `uploadToSignedUrl` cannot report progress at
+all, so this is XHR against the signed URL — the one thing XHR still does that `fetch` does not.
+Three concurrent, because browsers cap connections anyway and a queue showing ten started uploads
+while eight sit blocked is a progress bar that lies.
+
+## P31 · Drawings and specs into scope ✅
+
+Specs and drawings are read differently on purpose. A specification says what the work must be, and
+is read in page batches and cited by page. A drawing says what and how much there is, and is read by
+SHEET — chosen from the sheet index by discipline, cited by sheet number.
+
+That distinction is the whole feature. "A-201, keynote 4" is a reference a sub can act on. "Page 47
+of Drawings.pdf" is not, and R6 is not satisfied by a citation nobody can follow.
+
+A new agent (A8) reads every title block and writes `document_sheet`. It is the one canonical write
+an agent is trusted with, and the escape hatch is shaped as a method that can only write sheets
+rather than a database handle — see the note on `AgentContext.recordSheets`.
+
+Reading them together also surfaces where they disagree, which is drafted as scope with the conflict
+stated rather than silently resolved.
+
+## P32 · Packages as one long table ✅
+
+Collapsible by division, because an estimator working division 22 does not want division 03 on
+screen. Adding a division adds a head; removing one is refused once anything has been bid against
+it, since the cascade would take the record of the decision with it.
+
+Budget, allowance and contingency are typed in place. Notes are a floating panel with a global
+show/hide and right-click to open — a note is three sentences about why a number is what it is, and
+a table cell is not where three sentences go.
+
+## P33 · The bid tab sheet ✅
+
+`leveling_result` answers "which bid is lowest". This answers "where does the difference come from",
+which you have to answer first to defend the other one. One row per scope item, three bidder columns,
+swappable, defaulting to the three adjusted-lowest.
+
+`scope_leveling` splits the number in two on purpose. `rolled_total` is derived and replaced on every
+run; `override_total` is the estimator's and survives. Two columns rather than one because "the model
+said 86,200 and I say 91,000" is exactly the labelled correction P28 wants, and collapsing them loses
+it.
+
+**The bug that mattered:** the first version deleted and rebuilt the whole grid on recompute. A quote
+that is not yet `EXTRACTED` contributes no cells, so recomputing a package with an unread bid deleted
+an estimator's typed-in numbers and put nothing back. Caught by a smoke test asserting survival
+across a recompute, which is now the assertion that guards it. Recompute silently eating typed-in
+numbers is the single behaviour that would send everybody back to Excel.
+
+## P34 · Scope context and the learning loop ✅
+
+Scope does not leak at the item level. "Metal stud framing, 4,200 SF" is enough to check that
+somebody priced framing; it is not enough to check that anybody priced the head-of-wall detail, and
+the head-of-wall detail is the change order.
+
+`scope_context` holds what an item includes, excludes, interfaces with, assumes, risks, and is priced
+against. Every line is grounded — a gap pattern, a past change order, or the item's own description —
+and a line that rests on none of those is not written. General construction wisdom with nothing
+behind it is what an estimator cannot act on, because they cannot tell whether it applies to this
+job.
+
+**The loop closes in `recordContextOutcomes`,** which runs last on every recompute:
+
+- `CAUGHT_GAP` — a gap opened here and somebody had written that it might.
+- `MISSED_GAP` — a gap opened and nothing warned. **This is the valuable one.** It names a seam the
+  system does not know about, and it is the row a human turns into a new gap pattern.
+- `PRICED_BY_ALL` — everyone carried it. Weak evidence, but it stops a pattern that fires on every
+  job and predicts nothing from looking valuable.
+
+Outcomes are append-only and deduplicated on the evidence they rest on, so pressing Recompute five
+times cannot turn one finding into a track record of five. `gap_pattern` gained `times_proposed` and
+`times_confirmed`, and the UI shows the raw counts rather than a score — "caught 3" is a fact an
+estimator can check, "87% reliable" is a model's opinion with the workings hidden.
+
+Promotion into patterns is deliberately manual. A system that promotes its own failures into rules
+unsupervised gets worse in a way nobody notices until it is expensive.
+
+### A consequence worth knowing
+
+A context line that has been scored cannot be deleted (0013). The outcome must keep pointing at the
+line that earned it, or what remains is "something happened somewhere". Retire it instead —
+`is_active`, with a reason, which is itself a signal: a line retired on three projects running is a
+pattern that should come out of the knowledge base.
+
+---
+
+# What is left
+
+**This is the running list.** Update it as things land; it is the first thing to
+read when picking the build back up, and `npm run resume` points at it.
+
+## Open
+
+| | What | Why it matters |
+|---|---|---|
+| **L1** | **Drawing→scope truncation** — 1 batch in 13 lost its answer mid-JSON on a real stamped set | Batch isolation means the run survives it, but ~8% of the sheets go unread. Thinking is now capped at 6k of a 48k budget, which is untested against a full run |
+| **L2** | Spec-side drafting has never run on a real specification | Every fix so far came from drawings. A 200-page text spec is a different shape and will have its own failure |
+| **L3** | Scope template covers 15 divisions; 01, 04, 11–14, 23 partial, 25, 27, 32 are thin or absent | The container list is the thing an estimator judges the product on in the first ten seconds |
+| **L4** | `PACKAGE_TABLE` retired but `Solicitation`, `LevelingMatrix` and `BidTab` still carry their own hand-rolled tables | The Excel surface is only on Scope & Packages. It was asked for on *all* tables |
+| **L5** | Formulas are per-cell and browser-local | A formula is lost on reload, and cannot reference another package's total. Fine for entry, not for a model |
+| **L6** | Gap→pattern promotion is manual with no UI | `MISSED_GAP` rows are the corpus. There is no screen that turns one into a `gap_pattern`, so the loop only half closes |
+| **L7** | Rate limiting, and PDF robustness on malformed files | Carried from P20 |
+| **L8** | Deploy to Replit | `.replit` is committed and correct; the import has never been run |
+
+## Known, accepted, not bugs
+
+- **A context line that has been scored cannot be deleted** (0013). Retire it.
+  The outcome must keep pointing at the line that earned it.
+- **A quote sitting at `EXTRACTED` with nothing promoted has no lines to
+  normalise.** That is the gate working. The preload script now always accepts
+  rather than assuming `EXTRACTED` means accepted.
+- **One retired context line labelled `SMOKE`** on the demo project, left by a
+  test. It cannot be removed, by design.
+
+## Environment traps, since they cost a day
+
+- Orphaned Node children survive a stopped dev server on Windows and keep
+  running their own job worker. Two workers on one queue means whichever process
+  holds the older code can claim the job.
+- tsx caches compiled output in `%LOCALAPPDATA%\Temp\tsx-<user>`. A stale entry
+  serves code that is not in the repo and every symptom points somewhere else.
+
+`npm run resume` clears both before doing anything else.

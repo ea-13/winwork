@@ -5,6 +5,8 @@ import { runQuoteExtraction } from '../agents/extract-quote.js';
 import { runChangeOrderArchaeology } from '../agents/co-archaeologist.js';
 import { runDivisionConsult } from '../agents/division-consult.js';
 import { runScopeDrafter } from '../agents/draft-scope.js';
+import { runSheetIndexer } from '../agents/index-sheets.js';
+import { runScopeContextDrafter } from '../agents/scope-context.js';
 import { runNormalisation } from '../agents/normalise-quote.js';
 import { supabaseAdmin } from './supabase.js';
 
@@ -21,6 +23,8 @@ const AGENTS: Record<string, Agent> = {
   normalise_quote: (ctx, payload) => runNormalisation(ctx, payload),
   division_consult: (ctx, payload) => runDivisionConsult(ctx, payload),
   draft_scope: (ctx, payload) => runScopeDrafter(ctx, payload),
+  index_sheets: (ctx, payload) => runSheetIndexer(ctx, payload),
+  draft_scope_context: (ctx, payload) => runScopeContextDrafter(ctx, payload),
   co_archaeology: (ctx, payload) => runChangeOrderArchaeology(ctx, payload),
 };
 

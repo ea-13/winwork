@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner, Layout } from '../components/Layout';
-import { apiGet } from '../lib/api';
+import { apiGet, apiPost } from '../lib/api';
 
 type Group = {
   run: {
@@ -33,6 +33,67 @@ const FILL_TAG: Record<string, string> = {
 };
 
 /**
+ * Accepting a run.
+ *
+ * The rationale is not decoration. Every promotion writes an approval naming
+ * the person and the reason, and "looks right" six months later is the
+ * difference between a defensible baseline and a story nobody can reconstruct.
+ */
+function Accept({
+  label,
+  onConfirm,
+}: {
+  label: string;
+  onConfirm: (rationale: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rationale, setRationale] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
+        className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white"
+      >
+        {label}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+      <input
+        autoFocus
+        value={rationale}
+        onChange={(event) => setRationale(event.target.value)}
+        placeholder="Why are you accepting this?"
+        className="w-56 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-slate-900"
+      />
+      <button
+        disabled={busy || rationale.trim() === ''}
+        onClick={async () => {
+          setBusy(true);
+          await onConfirm(rationale.trim());
+          setBusy(false);
+          setOpen(false);
+          setRationale('');
+        }}
+        className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+      >
+        {busy ? '…' : 'Confirm'}
+      </button>
+      <button onClick={() => setOpen(false)} className="px-1 text-xs text-slate-400">
+        cancel
+      </button>
+    </div>
+  );
+}
+
+/**
  * P17 · The review queue.
  *
  * Everything an agent has proposed and nobody has accepted yet, with the
@@ -46,14 +107,29 @@ export function ReviewQueuePage() {
   const [open, setOpen] = useState<string | null>(null);
   const [showAccepted, setShowAccepted] = useState(false);
 
-  useEffect(() => {
-    apiGet<{ groups: Group[]; awaiting: number }>('/review-queue')
-      .then((data) => {
-        setGroups(data.groups);
-        setAwaiting(data.awaiting);
-      })
-      .catch((caught: Error) => setError(caught.message));
+  const load = useCallback(async () => {
+    const data = await apiGet<{ groups: Group[]; awaiting: number }>('/review-queue');
+    setGroups(data.groups);
+    setAwaiting(data.awaiting);
   }, []);
+
+  useEffect(() => {
+    load().catch((caught: Error) => setError(caught.message));
+  }, [load]);
+
+  const accept = async (runId: string, kind: 'scope' | 'context', rationale: string) => {
+    setError(null);
+    try {
+      const result = await apiPost<{ created?: number; updated?: number; note?: string | null }>(
+        `/runs/${runId}/promote-${kind}`,
+        { rationale },
+      );
+      await load();
+      if (result.note) setError(result.note);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  };
 
   const shown = showAccepted ? groups : groups.filter((group) => !group.accepted);
 
@@ -81,11 +157,11 @@ export function ReviewQueuePage() {
       <div className="space-y-2">
         {shown.map((group) => (
           <div key={group.run.id} className="rounded-lg border border-slate-200 bg-white">
-            <button
-              onClick={() => setOpen(open === group.run.id ? null : group.run.id)}
-              className="flex w-full items-center justify-between px-4 py-3 text-left"
-            >
-              <div>
+            <div className="flex w-full items-center justify-between gap-3 px-4 py-3">
+              <button
+                onClick={() => setOpen(open === group.run.id ? null : group.run.id)}
+                className="min-w-0 flex-1 text-left"
+              >
                 <div className="text-sm font-medium text-slate-900">
                   {group.run.agent_type.replace(/_/g, ' ')}
                   {group.run.input_ref && (
@@ -100,15 +176,32 @@ export function ReviewQueuePage() {
                   {group.run.model && ` · ${group.run.model}`}
                   {group.run.prompt_version && ` · ${group.run.prompt_version}`}
                 </div>
+              </button>
+
+              <div className="flex shrink-0 items-center gap-2">
+                {!group.accepted && group.byTable.scope_item !== undefined && (
+                  <Accept
+                    label="Accept scope"
+                    onConfirm={(rationale) => accept(group.run.id, 'scope', rationale)}
+                  />
+                )}
+                {!group.accepted && group.byTable.scope_context !== undefined && (
+                  <Accept
+                    label="Accept context"
+                    onConfirm={(rationale) => accept(group.run.id, 'context', rationale)}
+                  />
+                )}
+                <span
+                  className={`rounded px-2 py-0.5 text-xs font-medium ${
+                    group.accepted
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {group.accepted ? 'accepted' : 'awaiting review'}
+                </span>
               </div>
-              <span
-                className={`rounded px-2 py-0.5 text-xs font-medium ${
-                  group.accepted ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {group.accepted ? 'accepted' : 'awaiting review'}
-              </span>
-            </button>
+            </div>
 
             {open === group.run.id && (
               <div className="border-t border-slate-100 px-4 py-3">

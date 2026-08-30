@@ -239,3 +239,221 @@ export async function promoteNormalisation(
 
   return { lines, exclusions };
 }
+
+// -----------------------------------------------------------------------------
+// Drafts that create rows rather than fill them in
+// -----------------------------------------------------------------------------
+
+type ScopeItemValue = {
+  scope_id?: string | null;
+  csi_division?: string | null;
+  csi_section?: string | null;
+  title?: string;
+  description?: string | null;
+  unit?: string | null;
+  quantity?: number | null;
+  quantity_basis?: string | null;
+};
+
+type ScopeContextValue = {
+  scope_item_id?: string;
+  kind?: string;
+  text?: string;
+  origin?: string;
+  gap_pattern_id?: string | null;
+};
+
+/**
+ * Turns a scope-drafting run into real scope items.
+ *
+ * Idempotent on scope_id: promoting the same run twice updates the items it
+ * already created rather than doubling the baseline. Re-running the drafter
+ * after fixing a document label is normal, and an estimator should not have to
+ * clean up forty duplicate line items afterwards.
+ *
+ * A locked item is never touched. Locking is H2, and a re-draft quietly
+ * rewriting a baseline somebody has already levelled bids against would make
+ * every comparison built on it wrong.
+ */
+export async function promoteScopeDrafts(
+  db: SupabaseClient,
+  options: { tenantId: string; actorId: string; projectId: string; runId: string },
+): Promise<{ created: number; updated: number; skippedLocked: number }> {
+  const { data: drafts, error } = await db
+    .from('draft')
+    .select('id, target_table, target_id, field, proposed_value, source_location, confidence')
+    .eq('agent_run_id', options.runId)
+    .eq('target_table', 'scope_item')
+    .order('id');
+
+  if (error) throw new Error(`Could not read the drafts: ${error.message}`);
+  const rows = (drafts ?? []) as Draft[];
+  if (rows.length === 0) throw new Error('That run produced no scope items to promote');
+
+  const { data: existing } = await db
+    .from('scope_item')
+    .select('id, scope_id, is_locked')
+    .eq('project_id', options.projectId);
+
+  const byScopeId = new Map(
+    (existing ?? []).map((item) => [item.scope_id as string, item]),
+  );
+
+  let created = 0;
+  let updated = 0;
+  let skippedLocked = 0;
+
+  for (const draft of rows) {
+    const value = (draft.proposed_value ?? {}) as ScopeItemValue;
+    if (!value.title || !value.scope_id) continue;
+
+    const match = byScopeId.get(value.scope_id);
+
+    if (match?.is_locked) {
+      skippedLocked += 1;
+      continue;
+    }
+
+    const fields = {
+      csi_division: value.csi_division ?? null,
+      csi_section: value.csi_section ?? null,
+      title: value.title,
+      description: value.description ?? null,
+      unit: value.unit ?? null,
+      // R1: an unstated quantity stays null. It is never defaulted to zero.
+      quantity: value.quantity ?? null,
+      quantity_basis: value.quantity_basis ?? null,
+    };
+
+    if (match) {
+      const { error: updateError } = await db
+        .from('scope_item')
+        .update(fields)
+        .eq('id', match.id);
+      if (updateError) throw new Error(`Could not update ${value.scope_id}: ${updateError.message}`);
+      updated += 1;
+      continue;
+    }
+
+    const { error: insertError } = await db.from('scope_item').insert({
+      tenant_id: options.tenantId,
+      project_id: options.projectId,
+      scope_id: value.scope_id,
+      ...fields,
+    });
+
+    if (insertError) throw new Error(`Could not create ${value.scope_id}: ${insertError.message}`);
+    created += 1;
+  }
+
+  await db.from('audit_event').insert({
+    tenant_id: options.tenantId,
+    actor_id: options.actorId,
+    action: 'PROMOTE_SCOPE',
+    table_name: 'scope_item',
+    record_id: options.projectId,
+    before: null,
+    after: { agent_run_id: options.runId, created, updated, skippedLocked },
+  });
+
+  return { created, updated, skippedLocked };
+}
+
+/**
+ * Turns a context-drafting run into real context lines.
+ *
+ * Deduplicated on (scope item, kind, text) so re-running the drafter does not
+ * stack four copies of the same inclusion onto an item. A line that already
+ * exists is left exactly as it is — including any edit a human has made to its
+ * wording, which is the whole reason not to replace-and-reinsert here.
+ */
+export async function promoteContextDrafts(
+  db: SupabaseClient,
+  options: { tenantId: string; actorId: string; runId: string },
+): Promise<{ created: number; alreadyPresent: number }> {
+  const { data: drafts, error } = await db
+    .from('draft')
+    .select('id, target_table, target_id, field, proposed_value, source_location, confidence')
+    .eq('agent_run_id', options.runId)
+    .eq('target_table', 'scope_context')
+    .order('id');
+
+  if (error) throw new Error(`Could not read the drafts: ${error.message}`);
+  const rows = (drafts ?? []) as Draft[];
+  if (rows.length === 0) throw new Error('That run produced no context lines to promote');
+
+  const scopeItemIds = [
+    ...new Set(
+      rows
+        .map((draft) => (draft.proposed_value as ScopeContextValue)?.scope_item_id)
+        .filter(Boolean) as string[],
+    ),
+  ];
+
+  const { data: existing } = scopeItemIds.length
+    ? await db
+        .from('scope_context')
+        .select('scope_item_id, kind, text')
+        .in('scope_item_id', scopeItemIds)
+    : { data: [] as Record<string, unknown>[] };
+
+  const normalise = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  const present = new Set(
+    (existing ?? []).map(
+      (line) => `${line.scope_item_id}|${line.kind}|${normalise(String(line.text))}`,
+    ),
+  );
+
+  const position = new Map<string, number>();
+  for (const line of existing ?? []) {
+    const key = line.scope_item_id as string;
+    position.set(key, (position.get(key) ?? 0) + 1);
+  }
+
+  let created = 0;
+  let alreadyPresent = 0;
+
+  for (const draft of rows) {
+    const value = (draft.proposed_value ?? {}) as ScopeContextValue;
+    if (!value.scope_item_id || !value.kind || !value.text) continue;
+
+    const key = `${value.scope_item_id}|${value.kind}|${normalise(value.text)}`;
+    if (present.has(key)) {
+      alreadyPresent += 1;
+      continue;
+    }
+
+    const next = (position.get(value.scope_item_id) ?? 0) + 1;
+    position.set(value.scope_item_id, next);
+
+    const { error: insertError } = await db.from('scope_context').insert({
+      tenant_id: options.tenantId,
+      scope_item_id: value.scope_item_id,
+      kind: value.kind,
+      text: value.text,
+      origin: value.origin ?? 'PATTERN',
+      source_location: draft.source_location,
+      gap_pattern_id: value.gap_pattern_id ?? null,
+      confidence: draft.confidence,
+      position: next,
+      created_by: options.actorId,
+    });
+
+    if (insertError) throw new Error(`Could not create a context line: ${insertError.message}`);
+    present.add(key);
+    created += 1;
+  }
+
+  await db.from('audit_event').insert({
+    tenant_id: options.tenantId,
+    actor_id: options.actorId,
+    action: 'PROMOTE_CONTEXT',
+    table_name: 'scope_context',
+    record_id: options.runId,
+    before: null,
+    after: { agent_run_id: options.runId, created, alreadyPresent },
+  });
+
+  return { created, alreadyPresent };
+}

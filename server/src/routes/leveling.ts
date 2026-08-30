@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import { requireRole } from '../lib/auth.js';
-import { computeAddBacks, computeLeveling, detectGaps } from '../lib/leveling.js';
+import {
+  computeAddBacks,
+  computeLeveling,
+  computeScopeLeveling,
+  detectGaps,
+  recordContextOutcomes,
+} from '../lib/leveling.js';
 import { supabaseForUser } from '../lib/supabase.js';
 
 export const levelingRouter = Router();
@@ -38,6 +44,11 @@ levelingRouter.post('/packages/:packageId/level', requireRole('EST', 'BC'), asyn
     const addBacks = await computeAddBacks(db, { tenantId: auth.tenantId, packageId });
     const gaps = await detectGaps(db, { tenantId: auth.tenantId, packageId });
     const leveling = await computeLeveling(db, { tenantId: auth.tenantId, packageId });
+    const cells = await computeScopeLeveling(db, { tenantId: auth.tenantId, packageId });
+
+    // Last, because it scores what the steps above just decided. This is the
+    // only place the system writes down whether its own advice was any good.
+    const learned = await recordContextOutcomes(db, { tenantId: auth.tenantId, packageId });
 
     await db.from('audit_event').insert({
       tenant_id: auth.tenantId,
@@ -46,10 +57,10 @@ levelingRouter.post('/packages/:packageId/level', requireRole('EST', 'BC'), asyn
       table_name: 'work_package',
       record_id: packageId,
       before: null,
-      after: { addBacks, gaps, ranked: leveling.length },
+      after: { addBacks, gaps, ranked: leveling.length, cells: cells.length, learned },
     });
 
-    res.json({ addBacks, gaps, leveling });
+    res.json({ addBacks, gaps, leveling, cells: cells.length, learned });
   } catch (caught) {
     res.status(500).json({ error: caught instanceof Error ? caught.message : String(caught) });
   }
@@ -135,4 +146,396 @@ levelingRouter.get('/packages/:packageId/gaps', async (req, res) => {
     );
 
   res.json(rows);
+});
+
+// -----------------------------------------------------------------------------
+// The bid tab sheet — one row per scope item, one column per bidder
+// -----------------------------------------------------------------------------
+
+/**
+ * Everything the bid tab needs in one request.
+ *
+ * Bidders come back ordered by advisory rank so the grid's first three columns
+ * are the three adjusted-lowest bids rather than whichever quote happened to be
+ * uploaded first. An estimator comparing three subs wants the three that matter.
+ */
+levelingRouter.get('/packages/:packageId/scope-leveling', async (req, res) => {
+  const packageId = req.params.packageId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: packageScope } = await db
+    .from('package_scope')
+    .select('scope_item_id')
+    .eq('package_id', packageId);
+
+  const scopeIds = (packageScope ?? []).map((row) => row.scope_item_id as string);
+
+  const [{ data: items }, { data: cells }, { data: quotes }, { data: results }, { data: subs }] =
+    await Promise.all([
+      scopeIds.length
+        ? db
+            .from('scope_item')
+            .select(
+              'id, scope_id, csi_division, csi_section, title, description, unit, quantity, is_locked',
+            )
+            .in('id', scopeIds)
+            .order('csi_division')
+            .order('scope_id')
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      db.from('scope_leveling').select('*').eq('package_id', packageId),
+      db
+        .from('quote')
+        .select('id, subcontractor_id, quoted_total, source_filename, status')
+        .eq('package_id', packageId),
+      db
+        .from('leveling_result')
+        .select('quote_id, adjusted_total, quoted_total, advisory_rank')
+        .eq('package_id', packageId),
+      db.from('subcontractor').select('id, name'),
+    ]);
+
+  const subName = new Map((subs ?? []).map((row) => [row.id as string, row.name as string]));
+  const resultByQuote = new Map((results ?? []).map((row) => [row.quote_id as string, row]));
+
+  const bidders = (quotes ?? [])
+    .map((quote) => {
+      const result = resultByQuote.get(quote.id as string);
+      return {
+        quoteId: quote.id as string,
+        name:
+          (quote.subcontractor_id ? subName.get(quote.subcontractor_id as string) : null) ??
+          (quote.source_filename as string | null) ??
+          'Unidentified bidder',
+        status: quote.status as string,
+        quotedTotal: (quote.quoted_total as number | null) ?? null,
+        adjustedTotal: (result?.adjusted_total as number | null) ?? null,
+        // 0 means unranked — no stated total. It sorts last, never as zero (R1).
+        advisoryRank: (result?.advisory_rank as number | null) ?? 0,
+      };
+    })
+    .sort((a, b) => {
+      if (a.advisoryRank === 0) return 1;
+      if (b.advisoryRank === 0) return -1;
+      return a.advisoryRank - b.advisoryRank;
+    });
+
+  res.json({
+    scopeItems: items ?? [],
+    bidders,
+    cells: (cells ?? []).map((cell) => ({
+      scopeItemId: cell.scope_item_id,
+      quoteId: cell.quote_id,
+      rolledTotal: cell.rolled_total,
+      overrideTotal: cell.override_total,
+      note: cell.note,
+      lineCount: cell.line_count,
+      isExcluded: cell.is_excluded,
+      isCarried: cell.is_carried,
+      matchBasis: cell.match_basis,
+    })),
+  });
+});
+
+/**
+ * The estimator's own number, or their note, on one cell.
+ *
+ * Upserts rather than requiring a recompute first, so a note can be written
+ * against a sub who priced nothing — which is exactly the cell most worth
+ * annotating, because a blank with no explanation is the thing that gets
+ * misread later.
+ */
+levelingRouter.post(
+  '/packages/:packageId/scope-leveling/cell',
+  requireRole('EST', 'BC'),
+  async (req, res) => {
+    const packageId = req.params.packageId ?? '';
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const scopeItemId = typeof body.scopeItemId === 'string' ? body.scopeItemId : '';
+    const quoteId = typeof body.quoteId === 'string' ? body.quoteId : '';
+
+    if (!scopeItemId || !quoteId) {
+      res.status(400).json({ error: 'scopeItemId and quoteId are both required' });
+      return;
+    }
+
+    const patch: Record<string, unknown> = {};
+
+    if ('overrideTotal' in body) {
+      const raw = body.overrideTotal;
+      patch.override_total =
+        typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+    }
+    if ('note' in body) {
+      const raw = typeof body.note === 'string' ? body.note.trim() : '';
+      patch.note = raw === '' ? null : raw;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      res.status(400).json({ error: 'Nothing to write — send overrideTotal, note, or both' });
+      return;
+    }
+
+    const db = supabaseForUser(auth.token);
+
+    const { data: before } = await db
+      .from('scope_leveling')
+      .select('*')
+      .eq('package_id', packageId)
+      .eq('scope_item_id', scopeItemId)
+      .eq('quote_id', quoteId)
+      .maybeSingle();
+
+    const { data: after, error } = await db
+      .from('scope_leveling')
+      .upsert(
+        {
+          ...(before ?? {}),
+          tenant_id: auth.tenantId,
+          package_id: packageId,
+          scope_item_id: scopeItemId,
+          quote_id: quoteId,
+          ...patch,
+          noted_by: auth.userId,
+          noted_at: new Date().toISOString(),
+        },
+        { onConflict: 'package_id,scope_item_id,quote_id' },
+      )
+      .select('*')
+      .single();
+
+    if (error) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    const { error: auditError } = await db.from('audit_event').insert({
+      tenant_id: auth.tenantId,
+      actor_id: auth.userId,
+      action: 'HUMAN_EDIT',
+      table_name: 'scope_leveling',
+      record_id: after.id,
+      before: before ? { override_total: before.override_total, note: before.note } : null,
+      after: patch,
+    });
+
+    if (auditError) {
+      res.status(500).json({
+        error: `Saved, but the audit record failed: ${auditError.message}`,
+        cell: after,
+      });
+      return;
+    }
+
+    res.json({ cell: after });
+  },
+);
+
+/**
+ * The drill-down: what these bidders actually wrote, for these scope items.
+ *
+ * Multi-select on both axes on purpose. A GC routinely buys several scopes
+ * under one contract, and "what does this contract cost from each of them"
+ * cannot be answered one scope item at a time.
+ */
+levelingRouter.get('/packages/:packageId/scope-leveling/detail', async (req, res) => {
+  const packageId = req.params.packageId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const list = (value: unknown): string[] =>
+    typeof value === 'string'
+      ? value.split(',').map((part) => part.trim()).filter(Boolean)
+      : [];
+
+  const scopeItemIds = list(req.query.scopeItemIds);
+  if (scopeItemIds.length === 0) {
+    res.status(400).json({ error: 'scopeItemIds is required — which scope to open' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: quotes } = await db
+    .from('quote')
+    .select('id, subcontractor_id, quoted_total, source_filename, status')
+    .eq('package_id', packageId);
+
+  const requested = list(req.query.quoteIds);
+  const quoteIds = (quotes ?? [])
+    .map((quote) => quote.id as string)
+    .filter((id) => requested.length === 0 || requested.includes(id));
+
+  const [{ data: items }, { data: lines }, { data: exclusions }, { data: cells }, { data: subs }] =
+    await Promise.all([
+      db
+        .from('scope_item')
+        .select(
+          'id, scope_id, csi_division, csi_section, title, description, unit, quantity, quantity_basis',
+        )
+        .in('id', scopeItemIds)
+        .order('csi_division')
+        .order('scope_id'),
+      quoteIds.length
+        ? db.from('quote_line').select('*').in('quote_id', quoteIds).in('scope_item_id', scopeItemIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      quoteIds.length
+        ? db
+            .from('quote_exclusion')
+            .select('*')
+            .in('quote_id', quoteIds)
+            .in('scope_item_id', scopeItemIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      db.from('scope_leveling').select('*').eq('package_id', packageId).in('scope_item_id', scopeItemIds),
+      db.from('subcontractor').select('id, name'),
+    ]);
+
+  const subName = new Map((subs ?? []).map((row) => [row.id as string, row.name as string]));
+
+  res.json({
+    scopeItems: items ?? [],
+    bidders: (quotes ?? [])
+      .filter((quote) => quoteIds.includes(quote.id as string))
+      .map((quote) => ({
+        quoteId: quote.id,
+        name:
+          (quote.subcontractor_id ? subName.get(quote.subcontractor_id as string) : null) ??
+          quote.source_filename ??
+          'Unidentified bidder',
+        quotedTotal: quote.quoted_total,
+      })),
+    lines: lines ?? [],
+    exclusions: exclusions ?? [],
+    cells: cells ?? [],
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Disposing of a scope gap
+// -----------------------------------------------------------------------------
+
+/**
+ * What the estimator decided to do about a gap nobody priced.
+ *
+ * ALLOWANCE and CONTINGENCY carry money into the buyout total. ACCEPTED is a
+ * deliberate decision to carry nothing. VOID says it was never really a gap.
+ *
+ * All four require a note. A gap disposed of without a reason is indistinguish-
+ * able from one nobody looked at, and the entire value of the risk log is that
+ * somebody looked.
+ */
+levelingRouter.post('/gaps/:gapId/assign', requireRole('EST', 'BC'), async (req, res) => {
+  const gapId = req.params.gapId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const TYPES = ['ALLOWANCE', 'CONTINGENCY', 'ACCEPTED', 'VOID'];
+  const clearing = body.assignedType === null;
+  const assignedType = typeof body.assignedType === 'string' ? body.assignedType : '';
+  const note = typeof body.note === 'string' ? body.note.trim() : '';
+
+  if (!clearing && !TYPES.includes(assignedType)) {
+    res
+      .status(400)
+      .json({ error: `assignedType must be one of ${TYPES.join(', ')}, or null to clear` });
+    return;
+  }
+
+  if (!clearing && note === '') {
+    res
+      .status(400)
+      .json({ error: 'A note is required. A decision without a reason is not a decision.' });
+    return;
+  }
+
+  const carriesMoney = assignedType === 'ALLOWANCE' || assignedType === 'CONTINGENCY';
+  const amount =
+    typeof body.assignedAmount === 'number' && Number.isFinite(body.assignedAmount)
+      ? body.assignedAmount
+      : null;
+
+  if (!clearing && carriesMoney && amount === null) {
+    res.status(400).json({
+      error: `${assignedType} needs an amount — that is what it carries into the buyout.`,
+    });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: before } = await db.from('scope_gap').select('*').eq('id', gapId).maybeSingle();
+  if (!before) {
+    res.status(404).json({ error: 'No such gap' });
+    return;
+  }
+
+  const patch = clearing
+    ? {
+        assigned_type: null,
+        assigned_amount: null,
+        assigned_note: null,
+        assigned_by: null,
+        assigned_at: null,
+      }
+    : {
+        assigned_type: assignedType,
+        assigned_amount: carriesMoney ? amount : null,
+        assigned_note: note,
+        assigned_by: auth.userId,
+        assigned_at: new Date().toISOString(),
+      };
+
+  const { data: after, error } = await db
+    .from('scope_gap')
+    .update(patch)
+    .eq('id', gapId)
+    .select('*')
+    .single();
+
+  if (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+
+  const { error: auditError } = await db.from('audit_event').insert({
+    tenant_id: auth.tenantId,
+    actor_id: auth.userId,
+    action: 'GAP_DISPOSITION',
+    table_name: 'scope_gap',
+    record_id: gapId,
+    before: {
+      assigned_type: before.assigned_type,
+      assigned_amount: before.assigned_amount,
+      assigned_note: before.assigned_note,
+    },
+    after: patch,
+  });
+
+  if (auditError) {
+    res.status(500).json({
+      error: `Saved, but the audit record failed: ${auditError.message}`,
+      gap: after,
+    });
+    return;
+  }
+
+  res.json({ gap: after });
 });

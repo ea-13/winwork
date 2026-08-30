@@ -33,6 +33,29 @@ export type AgentContext = {
   read<T = Record<string, unknown>>(table: string, id: string): Promise<T | null>;
   /** Reads a stored document's bytes. */
   readFile(bucket: string, path: string): Promise<Buffer | null>;
+  /**
+   * Records what sheets a drawing set contains.
+   *
+   * The one write of canonical state an agent is trusted with, and it is
+   * narrow on purpose. A sheet number read off a title block is the same kind
+   * of fact as a page count or a file size: it is what the document IS, not a
+   * judgement about what it means. Nothing downstream is decided by it — it
+   * exists so a citation can say "A-201" instead of "page 47", which is what
+   * R6 actually requires to be useful.
+   *
+   * Note the shape of the escape hatch: a method that can only write sheets,
+   * not a database client. An agent still cannot draft a scope item into
+   * existence, and the type is what stops it.
+   */
+  recordSheets(documentId: string, sheets: SheetIndexRow[]): Promise<number>;
+};
+
+export type SheetIndexRow = {
+  pageNumber: number;
+  sheetNumber: string | null;
+  sheetTitle: string | null;
+  discipline: string | null;
+  confidence: number | null;
 };
 
 /**
@@ -157,6 +180,35 @@ export class AgentRun implements AgentContext {
     const { data, error } = await this.db.storage.from(bucket).download(path);
     if (error || !data) return null;
     return Buffer.from(await data.arrayBuffer());
+  }
+
+  /** See the note on AgentContext.recordSheets for why this exists at all. */
+  async recordSheets(documentId: string, sheets: SheetIndexRow[]): Promise<number> {
+    if (sheets.length === 0) return 0;
+
+    // Re-indexing replaces the previous read of the file rather than layering
+    // a second opinion on top of it.
+    await this.db.from('document_sheet').delete().eq('document_id', documentId);
+
+    const { error } = await this.db.from('document_sheet').insert(
+      sheets.map((sheet) => ({
+        tenant_id: this.tenantId,
+        document_id: documentId,
+        page_number: sheet.pageNumber,
+        sheet_number: sheet.sheetNumber,
+        sheet_title: sheet.sheetTitle,
+        discipline: sheet.discipline,
+        confidence: sheet.confidence,
+      })),
+    );
+    if (error) throw new Error(`Could not write the sheet index: ${error.message}`);
+
+    await this.db
+      .from('project_document')
+      .update({ indexed_at: new Date().toISOString() })
+      .eq('id', documentId);
+
+    return sheets.length;
   }
 
   async finish(status: 'DONE' | 'FAILED', tokenCost?: number): Promise<void> {

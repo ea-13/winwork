@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -6,7 +7,9 @@ import {
   useState,
   type ClipboardEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
+import { columnLetter, evaluateFormula, isFormula } from '../lib/formula';
 
 /**
  * A spreadsheet grid.
@@ -46,6 +49,18 @@ type Props = {
   onCommit: (rowId: string, patch: Record<string, unknown>) => Promise<void>;
   onAddRow?: () => Promise<void>;
   emptyMessage?: string;
+  /**
+   * Optional grouping. `groupOf` names the group a row belongs to; a header
+   * row is drawn whenever that name changes going down the list.
+   *
+   * Presentational only, and deliberately so: `rows` still contains nothing
+   * but data rows, so cell coordinates, ranges, copy/paste and formula
+   * references all keep counting the same things a user counts. A group header
+   * that occupied a row index would make =SUM(D2:D9) mean something different
+   * depending on which packages happened to be expanded.
+   */
+  groupOf?: (row: GridRow) => string;
+  renderGroup?: (groupKey: string, rowsInGroup: GridRow[]) => ReactNode;
 };
 
 type Cell = { r: number; c: number };
@@ -117,13 +132,25 @@ function parse(input: string, type: CellType | undefined): unknown {
 
 // ---------------------------------------------------------------------------
 
-export function Grid({ columns, rows, onCommit, onAddRow, emptyMessage }: Props) {
+export function Grid({
+  columns,
+  rows,
+  onCommit,
+  onAddRow,
+  emptyMessage,
+  groupOf,
+  renderGroup,
+}: Props) {
   const [active, setActive] = useState<Cell>({ r: 0, c: 0 });
   const [anchor, setAnchor] = useState<Cell | null>(null);
   const [editing, setEditing] = useState<{ cell: Cell; value: string } | null>(null);
   const [saveState, setSaveState] = useState<Record<string, SaveState>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [undoStack, setUndoStack] = useState<{ rowId: string; patch: Record<string, unknown> }[]>([]);
+  // What was typed, per cell, when it was a formula. Kept in the browser only:
+  // the stored value is the number, and a formula is an input convenience, not
+  // a fact about the project that other users need to see.
+  const [formulas, setFormulas] = useState<Record<string, string>>({});
 
   const wrapper = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -198,19 +225,74 @@ export function Grid({ columns, rows, onCommit, onAddRow, emptyMessage }: Props)
     [onCommit],
   );
 
+  /**
+   * Reads any cell as a number, for a formula to refer to.
+   *
+   * Blank is null rather than 0, and the formula engine drops nulls rather
+   * than summing them as zeros — in a bid tab the difference between "nobody
+   * priced this" and "somebody priced it at nothing" is the entire product.
+   */
+  const lookup = useCallback(
+    (r: number, c: number): number | null => {
+      const row = rows[r];
+      const column = columns[c];
+      if (!row || !column) return null;
+      const raw = row[column.key];
+      if (raw === null || raw === undefined || raw === '') return null;
+      const value = Number(String(raw).replace(/[$,\s]/g, ''));
+      return Number.isFinite(value) ? value : null;
+    },
+    [rows, columns],
+  );
+
   const commitCell = useCallback(
     async (cell: Cell, raw: string) => {
       const row = rows[cell.r];
       const column = columns[cell.c];
       if (!row || !column) return;
 
-      const value = parse(raw, column.type);
+      let input = raw;
+
+      // A formula is a way of typing a number, not a new kind of value. It is
+      // evaluated here and the RESULT is what gets stored, so that leveling,
+      // the buyout totals and every export keep reading plain numbers and none
+      // of them has to know formulas exist.
+      if (isFormula(raw)) {
+        const numeric = column.type === 'number' || column.type === 'currency';
+        if (!numeric) {
+          setErrors((state) => ({
+            ...state,
+            [key(cell)]: 'Formulas only work in number and currency columns.',
+          }));
+          setSaveState((state) => ({ ...state, [key(cell)]: 'error' }));
+          return;
+        }
+
+        const result = evaluateFormula(raw, lookup);
+        if (!result.ok) {
+          setErrors((state) => ({ ...state, [key(cell)]: result.error }));
+          setSaveState((state) => ({ ...state, [key(cell)]: 'error' }));
+          return;
+        }
+        input = String(result.value);
+        setFormulas((state) => ({ ...state, [`${row.id}:${column.key}`]: raw.trim() }));
+      } else {
+        // Typing over a formula retires it. Otherwise the cell would show a
+        // formula that no longer produced the number sitting in it.
+        setFormulas((state) => {
+          const next = { ...state };
+          delete next[`${row.id}:${column.key}`];
+          return next;
+        });
+      }
+
+      const value = parse(input, column.type);
       const before = row[column.key] ?? null;
       if (JSON.stringify(before) === JSON.stringify(value)) return;
 
       await commit(row.id, { [column.key]: value }, [cell], { [column.key]: before });
     },
-    [rows, columns, commit],
+    [rows, columns, commit, lookup],
   );
 
   // ------------------------------------------------------------- navigation
@@ -235,10 +317,13 @@ export function Grid({ columns, rows, onCommit, onAddRow, emptyMessage }: Props)
       if (!column || !row || column.editable === false) return;
       setEditing({
         cell,
-        value: initial ?? editable(row[column.key], column.type),
+        value:
+          initial ??
+          formulas[`${row.id}:${column.key}`] ??
+          editable(row[column.key], column.type),
       });
     },
-    [columns, rows],
+    [columns, rows, formulas],
   );
 
   const finishEdit = useCallback(
@@ -504,15 +589,20 @@ export function Grid({ columns, rows, onCommit, onAddRow, emptyMessage }: Props)
               <th className="sticky left-0 z-20 w-12 border-b border-r border-slate-300 bg-slate-100 px-2 py-1.5 text-xs font-normal text-slate-400">
                 #
               </th>
-              {columns.map((column) => (
+              {columns.map((column, index) => (
                 <th
                   key={column.key}
                   style={{ width: column.width ?? 160, minWidth: column.width ?? 160 }}
                   className="border-b border-r border-slate-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-semibold text-slate-700"
                 >
-                  {column.label}
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="text-[10px] font-normal text-slate-400">
+                      {columnLetter(index)}
+                    </span>
+                    {column.label}
+                  </span>
                   {column.hint && (
-                    <span className="ml-1 font-normal text-slate-400">{column.hint}</span>
+                    <span className="font-normal text-slate-400">{column.hint}</span>
                   )}
                 </th>
               ))}
@@ -520,7 +610,21 @@ export function Grid({ columns, rows, onCommit, onAddRow, emptyMessage }: Props)
           </thead>
           <tbody>
             {rows.map((row, r) => (
-              <tr key={row.id}>
+              <Fragment key={row.id}>
+                {groupOf && renderGroup && groupOf(row) !== (r > 0 ? groupOf(rows[r - 1] as GridRow) : null) && (
+                  <tr>
+                    <td
+                      colSpan={columns.length + 1}
+                      className="sticky left-0 border-b border-t border-slate-300 bg-slate-100 px-2 py-1"
+                    >
+                      {renderGroup(
+                        groupOf(row),
+                        rows.filter((other) => groupOf(other) === groupOf(row)),
+                      )}
+                    </td>
+                  </tr>
+                )}
+              <tr>
                 <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-slate-50 px-2 py-1 text-right text-xs text-slate-400">
                   {r + 1}
                 </td>
@@ -603,6 +707,7 @@ export function Grid({ columns, rows, onCommit, onAddRow, emptyMessage }: Props)
                   );
                 })}
               </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>

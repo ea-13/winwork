@@ -38,6 +38,12 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   );
 }
 
+export async function apiDelete<T>(path: string): Promise<T> {
+  return unwrap<T>(
+    await fetch(`/api${path}`, { method: 'DELETE', headers: await authHeader() }),
+  );
+}
+
 /** Multipart. Content-Type is left unset so the browser writes the boundary. */
 export async function apiUpload<T>(path: string, files: File[]): Promise<T> {
   const form = new FormData();

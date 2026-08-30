@@ -30,7 +30,7 @@ export const EDITABLE: Record<string, readonly string[]> = {
   project: ['name', 'owner_org', 'due_at', 'status'],
 
   work_package: ['name', 'description', 'lead_division', 'csi_divisions',
-    'budget_amount', 'allowance_amount', 'contingency_amount'],
+    'budget_amount', 'allowance_amount', 'contingency_amount', 'notes'],
 
   scope_item: ['scope_id', 'csi_division', 'csi_section', 'title', 'description',
     'unit', 'quantity', 'quantity_basis'],
@@ -53,6 +53,16 @@ export const EDITABLE: Record<string, readonly string[]> = {
   quote_term: ['term_key', 'term_value', 'standard_position', 'deviates'],
 
   scope_gap: ['gap_type', 'exposure_amount', 'exposure_basis', 'confidence', 'severity'],
+
+  // rolled_total is derived and recomputed; typing over it would be erased by
+  // the next level run. The estimator's number goes in override_total.
+  scope_leveling: ['override_total', 'note'],
+
+  document_sheet: ['sheet_number', 'sheet_title', 'discipline'],
+
+  // is_active and retired_reason move through the retire endpoint, which
+  // records why — a line that vanished with no reason teaches nothing.
+  scope_context: ['kind', 'text', 'source_location', 'position'],
 
   leveling_result: ['risk_allowance', 'score_price', 'score_scope', 'score_programme',
     'score_commercial', 'score_risk'],

@@ -434,7 +434,7 @@ documentsRouter.get('/projects/:projectId/documents', async (req, res) => {
 
   const { data, error } = await supabaseForUser(auth.token)
     .from('project_document')
-    .select('id, kind, filename, size_bytes, discipline, revision, uploaded_at')
+    .select('id, kind, filename, size_bytes, discipline, revision, page_count, indexed_at, routed_quote_id, uploaded_at')
     .eq('project_id', req.params.projectId)
     .order('uploaded_at', { ascending: false });
 
@@ -559,3 +559,134 @@ documentsRouter.get('/packages/:packageId/documents', async (req, res) => {
   }));
   res.json(documents);
 });
+
+/**
+ * Files a project-level quote against a package.
+ *
+ * Uploading a whole bid set in one drop means the sub bids arrive alongside the
+ * drawings, at project level, before anybody has decided which package they
+ * belong to. This is that decision — and it is a human's, because guessing the
+ * package from a filename is exactly the kind of quiet mistake that puts a
+ * mechanical quote into the plumbing comparison.
+ *
+ * The bytes are copied into the quote bucket rather than referenced across, so
+ * a quote's storage path means the same thing however it arrived.
+ */
+documentsRouter.post(
+  '/projects/:projectId/documents/:documentId/route-to-package',
+  requireRole('BC', 'EST'),
+  async (req, res) => {
+    const { documentId = '' } = req.params;
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const packageId = typeof (req.body ?? {}).packageId === 'string' ? req.body.packageId : '';
+    if (!packageId) {
+      res.status(400).json({ error: 'packageId is required — which package this bid is against' });
+      return;
+    }
+
+    const db = supabaseForUser(auth.token);
+
+    const { data: document } = await db
+      .from('project_document')
+      .select('id, filename, kind, storage_path, size_bytes, routed_quote_id')
+      .eq('id', documentId)
+      .maybeSingle();
+
+    if (!document) {
+      res.status(404).json({ error: 'No such document' });
+      return;
+    }
+    if (document.kind !== 'QUOTE') {
+      res.status(400).json({
+        error: `${document.filename} is filed as ${String(document.kind).toLowerCase()}. Label it a quote first.`,
+      });
+      return;
+    }
+    if (document.routed_quote_id) {
+      res.status(409).json({
+        error: `${document.filename} has already been filed against a package.`,
+      });
+      return;
+    }
+
+    const { data: pkg } = await db
+      .from('work_package')
+      .select('id, name')
+      .eq('id', packageId)
+      .maybeSingle();
+
+    if (!pkg) {
+      res.status(404).json({ error: 'No such package' });
+      return;
+    }
+
+    // Copy the bytes into the quote bucket. Referencing across buckets would
+    // leave quote.storage_path meaning two different things depending on how
+    // the file arrived, and every reader would have to know which.
+    const { data: blob, error: downloadError } = await supabaseAdmin.storage
+      .from(PROJECT_BUCKET)
+      .download(document.storage_path as string);
+
+    if (downloadError || !blob) {
+      res.status(502).json({
+        error: `Could not read ${document.filename} back from storage: ${downloadError?.message ?? 'no data'}`,
+      });
+      return;
+    }
+
+    await ensureBucket(QUOTE_BUCKET);
+    const target = `${auth.tenantId}/${packageId}/${Date.now()}-${document.filename}`;
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(QUOTE_BUCKET)
+      .upload(target, Buffer.from(await blob.arrayBuffer()), {
+        contentType: blob.type || 'application/octet-stream',
+      });
+
+    if (uploadError) {
+      res.status(502).json({ error: `Could not file the quote: ${uploadError.message}` });
+      return;
+    }
+
+    const { data: quote, error: quoteError } = await db
+      .from('quote')
+      .insert({
+        tenant_id: auth.tenantId,
+        package_id: packageId,
+        source_filename: document.filename,
+        source_size_bytes: document.size_bytes,
+        // The storage key column on quote is source_file_id, not storage_path.
+        source_file_id: target,
+        status: 'PENDING_EXTRACTION',
+      })
+      .select('id')
+      .single();
+
+    if (quoteError || !quote) {
+      res.status(500).json({ error: quoteError?.message ?? 'Could not create the quote' });
+      return;
+    }
+
+    await db
+      .from('project_document')
+      .update({ routed_quote_id: quote.id })
+      .eq('id', documentId);
+
+    await db.from('audit_event').insert({
+      tenant_id: auth.tenantId,
+      actor_id: auth.userId,
+      action: 'ROUTE_QUOTE',
+      table_name: 'quote',
+      record_id: quote.id,
+      before: null,
+      after: { documentId, packageId, filename: document.filename },
+    });
+
+    res.status(201).json({ quoteId: quote.id, package: pkg.name });
+  },
+);

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { DRAFT_SCOPE_PROMPT_VERSION } from '../agents/draft-scope.js';
+import { INDEX_SHEETS_PROMPT_VERSION } from '../agents/index-sheets.js';
 import { MODEL } from '../lib/anthropic.js';
 import { requireRole } from '../lib/auth.js';
 import { supabaseForUser } from '../lib/supabase.js';
@@ -268,78 +269,239 @@ solicitationRouter.get('/packages/:packageId/solicitation', async (req, res) => 
 });
 
 // -----------------------------------------------------------------------------
-// P18 · Scope of Work drafter
+// P18 · Scope of Work drafter, and the sheet index it reads drawings through
 // -----------------------------------------------------------------------------
 
-solicitationRouter.post('/projects/:projectId/draft-scope', requireRole('EST', 'BC'), async (req, res) => {
-  const projectId = req.params.projectId ?? '';
+/**
+ * Indexes one drawing set: what sheets it contains, and on which page.
+ *
+ * Separate from drafting because it is worth doing once per document and
+ * reusing for every division afterwards, and because an estimator wants to see
+ * the sheet list before anything is drafted from it.
+ */
+solicitationRouter.post(
+  '/projects/:projectId/documents/:documentId/index-sheets',
+  requireRole('EST', 'BC'),
+  async (req, res) => {
+    const { projectId = '', documentId = '' } = req.params;
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const db = supabaseForUser(auth.token);
+
+    const { data: document } = await db
+      .from('project_document')
+      .select('id, filename, storage_path, kind')
+      .eq('id', documentId)
+      .maybeSingle();
+
+    if (!document) {
+      res.status(404).json({ error: 'No such document' });
+      return;
+    }
+
+    const { data: run, error: runError } = await db
+      .from('agent_run')
+      .insert({
+        tenant_id: auth.tenantId,
+        agent_type: 'index_sheets',
+        project_id: projectId,
+        status: 'QUEUED',
+        input_ref: document.filename,
+        model: MODEL,
+        prompt_version: INDEX_SHEETS_PROMPT_VERSION,
+      })
+      .select('id')
+      .single();
+
+    if (runError || !run) {
+      res.status(500).json({ error: runError?.message ?? 'Could not create the agent run' });
+      return;
+    }
+
+    const { error: jobError } = await db.from('job').insert({
+      tenant_id: auth.tenantId,
+      job_type: 'index_sheets',
+      agent_run_id: run.id,
+      payload: {
+        projectId,
+        documentId: document.id,
+        storagePath: document.storage_path,
+        filename: document.filename,
+      },
+    });
+
+    if (jobError) {
+      res.status(500).json({ error: jobError.message });
+      return;
+    }
+
+    res.status(202).json({ runId: run.id });
+  },
+);
+
+/** The sheet list for a drawing set, in page order. */
+solicitationRouter.get('/documents/:documentId/sheets', async (req, res) => {
   const auth = req.auth;
   if (!auth) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
 
-  const body = (req.body ?? {}) as { documentId?: string; divisions?: string[] };
-  if (typeof body.documentId !== 'string') {
-    res.status(400).json({ error: 'documentId is required — which spec or scope narrative to read' });
+  const { data, error } = await supabaseForUser(auth.token)
+    .from('document_sheet')
+    .select('id, page_number, sheet_number, sheet_title, discipline, confidence')
+    .eq('document_id', req.params.documentId)
+    .order('page_number');
+
+  if (error) {
+    res.status(500).json({ error: error.message });
     return;
   }
-
-  const db = supabaseForUser(auth.token);
-
-  const { data: document } = await db
-    .from('project_document')
-    .select('id, filename, storage_path, kind')
-    .eq('id', body.documentId)
-    .maybeSingle();
-
-  if (!document) {
-    res.status(404).json({ error: 'No such document' });
-    return;
-  }
-
-  const { data: project } = await db
-    .from('project')
-    .select('bid_id')
-    .eq('id', projectId)
-    .maybeSingle();
-
-  const { data: run, error: runError } = await db
-    .from('agent_run')
-    .insert({
-      tenant_id: auth.tenantId,
-      agent_type: 'draft_scope',
-      project_id: projectId,
-      status: 'QUEUED',
-      input_ref: document.filename,
-      model: MODEL,
-      prompt_version: DRAFT_SCOPE_PROMPT_VERSION,
-    })
-    .select('id')
-    .single();
-
-  if (runError || !run) {
-    res.status(500).json({ error: runError?.message ?? 'Could not create the agent run' });
-    return;
-  }
-
-  const { error: jobError } = await db.from('job').insert({
-    tenant_id: auth.tenantId,
-    job_type: 'draft_scope',
-    agent_run_id: run.id,
-    payload: {
-      projectId,
-      bidId: project?.bid_id ?? '',
-      storagePath: document.storage_path,
-      filename: document.filename,
-      divisions: body.divisions ?? [],
-    },
-  });
-
-  if (jobError) {
-    res.status(500).json({ error: jobError.message });
-    return;
-  }
-
-  res.status(202).json({ runId: run.id });
+  res.json(data ?? []);
 });
+
+/**
+ * Drafts scope from the bid set.
+ *
+ * Takes a list of documents rather than one, because scope does not live in a
+ * single file — it lives in the specification AND the drawings, and an item
+ * that appears in both is better evidenced than one that appears in either.
+ * Drafting them together is also what makes it possible to notice they
+ * disagree.
+ *
+ * Drawings carry their sheet index into the payload so the agent can pick
+ * sheets by discipline and cite them by number.
+ */
+solicitationRouter.post(
+  '/projects/:projectId/draft-scope',
+  requireRole('EST', 'BC'),
+  async (req, res) => {
+    const projectId = req.params.projectId ?? '';
+    const auth = req.auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const body = (req.body ?? {}) as {
+      documentId?: string;
+      documentIds?: string[];
+      divisions?: string[];
+    };
+
+    // documentId stays accepted so an older client keeps working.
+    const requested = [
+      ...(Array.isArray(body.documentIds) ? body.documentIds : []),
+      ...(typeof body.documentId === 'string' ? [body.documentId] : []),
+    ].filter((id, index, all) => typeof id === 'string' && all.indexOf(id) === index);
+
+    if (requested.length === 0) {
+      res.status(400).json({
+        error: 'documentIds is required — which drawings and specs to read',
+      });
+      return;
+    }
+
+    const db = supabaseForUser(auth.token);
+
+    const { data: documents } = await db
+      .from('project_document')
+      .select('id, filename, storage_path, kind, indexed_at')
+      .eq('project_id', projectId)
+      .in('id', requested);
+
+    if (!documents || documents.length === 0) {
+      res.status(404).json({ error: 'None of those documents are on this project' });
+      return;
+    }
+
+    const drawingIds = documents
+      .filter((document) => document.kind === 'DRAWING')
+      .map((document) => document.id as string);
+
+    const { data: sheets } = drawingIds.length
+      ? await db
+          .from('document_sheet')
+          .select('document_id, page_number, sheet_number, sheet_title, discipline')
+          .in('document_id', drawingIds)
+          .order('page_number')
+      : { data: [] as Record<string, unknown>[] };
+
+    const sheetsByDocument = new Map<string, Record<string, unknown>[]>();
+    for (const sheet of sheets ?? []) {
+      const key = sheet.document_id as string;
+      sheetsByDocument.set(key, [...(sheetsByDocument.get(key) ?? []), sheet]);
+    }
+
+    const { data: project } = await db
+      .from('project')
+      .select('bid_id')
+      .eq('id', projectId)
+      .maybeSingle();
+
+    const { data: run, error: runError } = await db
+      .from('agent_run')
+      .insert({
+        tenant_id: auth.tenantId,
+        agent_type: 'draft_scope',
+        project_id: projectId,
+        status: 'QUEUED',
+        input_ref: documents.map((document) => document.filename).join(', ').slice(0, 500),
+        model: MODEL,
+        prompt_version: DRAFT_SCOPE_PROMPT_VERSION,
+      })
+      .select('id')
+      .single();
+
+    if (runError || !run) {
+      res.status(500).json({ error: runError?.message ?? 'Could not create the agent run' });
+      return;
+    }
+
+    const { error: jobError } = await db.from('job').insert({
+      tenant_id: auth.tenantId,
+      job_type: 'draft_scope',
+      agent_run_id: run.id,
+      payload: {
+        projectId,
+        bidId: project?.bid_id ?? '',
+        divisions: body.divisions ?? [],
+        documents: documents.map((document) => ({
+          id: document.id,
+          storagePath: document.storage_path,
+          filename: document.filename,
+          kind: document.kind,
+          sheets: (sheetsByDocument.get(document.id as string) ?? []).map((sheet) => ({
+            pageNumber: sheet.page_number,
+            sheetNumber: sheet.sheet_number,
+            sheetTitle: sheet.sheet_title,
+            discipline: sheet.discipline,
+          })),
+        })),
+      },
+    });
+
+    if (jobError) {
+      res.status(500).json({ error: jobError.message });
+      return;
+    }
+
+    const unindexed = documents.filter(
+      (document) => document.kind === 'DRAWING' && document.indexed_at === null,
+    );
+
+    res.status(202).json({
+      runId: run.id,
+      documents: documents.length,
+      note:
+        unindexed.length > 0
+          ? `${unindexed.length} drawing set(s) are not indexed yet — they will be read by page, ` +
+            'and cited by page rather than by sheet.'
+          : null,
+    });
+  },
+);

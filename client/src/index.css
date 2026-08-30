@@ -1,1 +1,102 @@
 @import 'tailwindcss';
+
+/**
+ * The look.
+ *
+ * Two things this should not feel like: a generic dashboard template, and a
+ * consumer web app. An estimator has a spreadsheet open on the other monitor,
+ * and the closer this sits to that world — dense, quiet, numeric — the less it
+ * feels like something they have to translate into their real workflow.
+ *
+ * So: a warm near-white ground rather than the cold blue-grey every framework
+ * ships with, hairline borders instead of shadows, one ink colour doing the
+ * work of a palette, and a single amber accent reserved for the thing that
+ * actually matters here — scope nobody has priced.
+ */
+
+@theme {
+  /* Warm neutrals. The cold default grey is the single biggest tell. */
+  --color-ink-50: #f7f7f5;
+  --color-ink-100: #eeedea;
+  --color-ink-200: #dedcd6;
+  --color-ink-300: #c4c1b8;
+  --color-ink-400: #96928a;
+  --color-ink-500: #6b675f;
+  --color-ink-600: #4d4a44;
+  --color-ink-700: #38352f;
+  --color-ink-800: #26241f;
+  --color-ink-900: #1a1815;
+
+  /* One accent, earned. Amber means uncovered scope and nothing else. */
+  --color-flag-50: #fdf6e8;
+  --color-flag-100: #f9e7c0;
+  --color-flag-500: #b4831f;
+  --color-flag-700: #7a5711;
+
+  --font-sans:
+    ui-sans-serif, -apple-system, 'Segoe UI', Inter, system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, monospace;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--color-ink-50);
+  color: var(--color-ink-800);
+}
+
+/**
+ * Money and quantities line up in a column or they are unreadable.
+ *
+ * This is the detail that separates something an estimator trusts from
+ * something they squint at: proportional digits make 1,181,000 and 999,000 the
+ * same width on screen and different widths in meaning.
+ */
+.tabular,
+table td,
+table th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Headings sit tighter than body text; the default tracking reads as slack. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.011em;
+}
+
+/**
+ * The scrollbars inside a grid.
+ *
+ * Left at browser default they are the widest, loudest thing on a dense table.
+ */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-300) transparent;
+}
+
+.thin-scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-ink-300);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Focus that is visible without being a blue halo over a data grid. */
+:focus-visible {
+  outline: 2px solid var(--color-ink-700);
+  outline-offset: 1px;
+}

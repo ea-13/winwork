@@ -54,6 +54,16 @@ export async function extractStructured<T extends z.ZodType>(options: {
   instruction: string;
   pdf?: Buffer;
   maxTokens?: number;
+  /**
+   * How much of the budget may go to thinking.
+   *
+   * Adaptive is right when the hard part is judgement — deciding whether a
+   * quote line means a scope item. It is wrong when the hard part is VOLUME:
+   * reading two dense drawings produces a long structured answer, and adaptive
+   * thinking spent 44k of a 48k budget reasoning and then truncated the answer
+   * mid-string. Capping it leaves the budget where the work actually is.
+   */
+  thinkingBudget?: number | 'adaptive';
 }): Promise<StructuredResult<z.infer<T>>> {
   const content: Anthropic.ContentBlockParam[] = [];
 
@@ -71,17 +81,43 @@ export async function extractStructured<T extends z.ZodType>(options: {
   }
   content.push({ type: 'text', text: options.instruction });
 
-  const response = await getClient().messages.parse({
+  // Streamed rather than a plain request, because the SDK refuses a
+  // non-streaming call whose estimated duration passes ten minutes — and the
+  // estimate scales with max_tokens, so a large output budget is refused
+  // before the request is even sent. Drafting scope from a batch of scanned
+  // drawings needs both the budget and the time, and streaming is how you get
+  // them. `finalMessage()` still carries `parsed_output`, so the structured
+  // guarantee is unchanged.
+  const budget = options.thinkingBudget ?? 'adaptive';
+
+  const stream = getClient().messages.stream({
     model: MODEL,
     max_tokens: options.maxTokens ?? 16000,
     system: options.system,
-    thinking: { type: 'adaptive' },
+    thinking:
+      budget === 'adaptive'
+        ? { type: 'adaptive' }
+        : { type: 'enabled', budget_tokens: budget },
     output_config: { format: zodOutputFormat(options.schema) },
     messages: [{ role: 'user', content }],
   });
 
+  const response = await stream.finalMessage();
+
   if (!response.parsed_output) {
-    throw new Error('The model did not return a parseable result');
+    // Say WHY. "Did not return a parseable result" is true of a refusal, a
+    // truncation and a malformed reply alike, and those need three different
+    // fixes — the first time this fired on a real plan set it cost an hour
+    // because the message named the symptom instead of the cause.
+    const reason = response.stop_reason ?? 'unknown';
+    const detail =
+      reason === 'max_tokens'
+        ? `ran out of output budget at ${options.maxTokens ?? 16000} tokens — the answer was cut off mid-structure. Send fewer pages per request, or raise maxTokens.`
+        : reason === 'refusal'
+          ? 'the model declined to answer.'
+          : `stop reason was "${reason}".`;
+
+    throw new Error(`The model did not return a parseable result: ${detail}`);
   }
 
   const inputTokens = response.usage.input_tokens;
