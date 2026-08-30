@@ -154,6 +154,17 @@ const firstItem = scope.body[0];
 const edited = await api(`/records/scope_item/${firstItem.id}`, 'PATCH', { title: 'QA edited title' });
 check('a scope item is editable', edited.status === 200 && edited.body.record.title === 'QA edited title');
 
+// The division decides which package the work is bought under, so it has to be
+// settable on the row itself rather than only at creation.
+const redivision = await api(`/records/scope_item/${firstItem.id}`, 'PATCH', {
+  csi_division: '26',
+});
+check(
+  'a scope item can be moved to another division',
+  redivision.status === 200 && redivision.body.record.csi_division === '26',
+);
+await api(`/records/scope_item/${firstItem.id}`, 'PATCH', { csi_division: firstItem.csi_division });
+
 const locked = await api(`/records/scope_item/${firstItem.id}`, 'PATCH', { is_locked: true });
 check('a gate-controlled column is refused (R4)', locked.status === 403);
 

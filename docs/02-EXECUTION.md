@@ -553,7 +553,7 @@ claim this project makes about itself that is worth anything.
 npx tsc -b        TS = 0
 npm run build     client + server clean; check-bundle finds no server secret
 npm run verify    3 suites — RLS, agent runtime, cross-tenant isolation
-npm run qa        103 feature checks against a throwaway project
+npm run qa        104 feature checks against a throwaway project
 ```
 
 `verify` proves the RULES hold. `qa` proves the FEATURES do. They fail
@@ -593,6 +593,36 @@ read when picking the build back up, and `npm run resume` points at it.
 | **L7** | Rate limiting, and PDF robustness on malformed files | Carried from P20 |
 | **L15** | Drafted **context** is still accepted from a banner, not in the table | Exactly the complaint that produced the in-table scope review. Context lines are read one scope item at a time in a side panel, and there is no way to see all of a run's proposals at once |
 | **L16** | Hindsight needs one real closed job through it end to end | Every piece is built and tested against seeded data. It has never seen a real change-order log, and that is the only thing that calibrates `gap_pattern.times_confirmed` |
+
+### Done 2026-08-31 · third pass
+
+- **The copilot is quiet by default.** It sat expanded at the top of every
+  project screen offering advice nobody asked for on that visit, and advice that
+  reappears expanded every time stops being advice and becomes furniture you
+  read past. It now opens collapsed, remembers the choice per browser, and keeps
+  the blocking count visible in its one collapsed line — so nothing urgent is
+  hidden, but nothing routine is shouted.
+- **CSI division is a column on the scope grid**, as a dropdown reading
+  `22 · Plumbing` while storing `22`. It is the most consequential field on a
+  scope row — it decides which package the work is bought under and which expert
+  reads it — and it was not on the grid at all: set once from a picker above the
+  table, then unreachable. As a grid column it is fixable in place, fillable
+  with Ctrl+D, and pasteable from any other line.
+- **Select columns accept a paste.** `GridColumn.options` now takes
+  `{ value, label }` as well as a plain string, and pasted text is resolved
+  against the choices — exact value, then label, then case-insensitively, then
+  the leading token, which is what catches `22 - Plumbing` pasted out of
+  somebody's spreadsheet. Text that matches nothing is **skipped, not written**:
+  a column with a fixed set of values is where junk does the most damage
+  downstream, and silently storing an unmatched string would be the worst of the
+  available options.
+- **Tech debt #15 closed.** `/api/health` queried `_health_probe`, a table that
+  has never existed, and treated "undefined table" as success. Correct before P2
+  created the schema, and quietly wrong every day since — it would have gone on
+  reporting `connected` with the schema dropped, which is the one moment a health
+  check exists for. It now counts `tenant`. Replit's deployment gate reads this
+  endpoint, so it was the wrong one to leave lying.
+- **QA 103 → 104.**
 
 ### Done 2026-08-31 · second pass
 

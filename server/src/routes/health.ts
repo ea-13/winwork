@@ -5,24 +5,25 @@ import { supabaseAdmin } from '../lib/supabase.js';
 /**
  * A real round-trip to Postgres, not a ping.
  *
- * There is no schema yet — P2 creates it — so this queries a table that does
- * not exist and treats "undefined table" as success. PostgREST only reaches
- * that error after authenticating and asking Postgres, which is exactly what we
- * want to prove: URL reachable, key accepted, database answering.
+ * It counts rows in `tenant` — a table that exists, that every other table
+ * hangs off, and that is cheap to ask about. Getting an answer proves the whole
+ * path: URL reachable, key accepted, PostgREST up, Postgres answering, schema
+ * cache current.
  *
- * TODO(P2): repoint at `tenants` and drop the tolerated-codes set.
+ * It used to query `_health_probe`, a table that has never existed, and treat
+ * "undefined table" as success. That was correct before P2 created the schema
+ * and quietly wrong for every day after — it would have gone on reporting
+ * `connected` with the schema dropped, which is the one moment a health check
+ * exists for. Replit's deployment gate reads this endpoint.
  */
-const NO_SCHEMA_YET = new Set([
-  '42P01', // postgres: undefined_table
-  'PGRST205', // postgrest: table not found in schema cache
-]);
-
 export const healthRouter = Router();
 
 healthRouter.get('/health', async (_req, res) => {
-  const { error } = await supabaseAdmin.from('_health_probe').select('*').limit(1);
+  const { error } = await supabaseAdmin
+    .from('tenant')
+    .select('id', { count: 'exact', head: true });
 
-  if (!error || NO_SCHEMA_YET.has(error.code ?? '')) {
+  if (!error) {
     const body: HealthResponse = { ok: true, db: 'connected' };
     res.json(body);
     return;

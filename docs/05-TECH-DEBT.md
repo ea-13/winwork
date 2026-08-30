@@ -41,7 +41,7 @@ enough context that an engineer who has never seen this repo can pick an item up
 |---|---|---|---|
 | 13 | **No generated database types** | Every Supabase query returns `any`-shaped rows that are hand-typed at each call site. A column rename breaks at runtime, not at compile time. **Fix:** `supabase gen types typescript` into `shared/`. | whole server |
 | 14 | **Duplicate row-to-camelCase mapping** | Each route hand-maps snake_case rows to camelCase DTOs. **Fix:** one mapper per entity. | `server/src/routes/*` |
-| 15 | **`health` endpoint still probes a fake table** | It queries `_health_probe` and treats "undefined table" as success — correct before P2, obsolete now. **Fix:** query `tenant`. | `server/src/routes/health.ts` |
+| 15 | ~~**`health` endpoint still probes a fake table**~~ **DONE 2026-08-31** | It queried `_health_probe` and treated "undefined table" as success — correct before P2, and quietly wrong every day after, since it would report `connected` with the schema dropped. Now counts `tenant`. Replit's deployment gate reads this. | `server/src/routes/health.ts` |
 | 16 | **No pagination anywhere** | Every list endpoint returns everything. Fine at demo scale, wrong at a hundred projects. | `server/src/routes/*` |
 | 17 | **Client refetches whole collections** | After every mutation the page reloads all lists. **Fix:** a query cache (TanStack Query) when the screens settle. | `client/src/pages/*` |
 | 18 | ~~**No `.replit` in the repo**~~ **DONE** | Deployment config lives only in the Replit UI, so it is neither reviewable nor reproducible. | repo root |

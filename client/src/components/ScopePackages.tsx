@@ -214,6 +214,21 @@ export function ScopePackages({
   const columns = useMemo<GridColumn[]>(
     () => [
       { key: 'scope_id', label: 'Scope ID', width: 170, editable: false },
+      // The division is the single most consequential field on the row — it
+      // decides which package the work is bought under and which expert reads
+      // it — and it was not on the grid at all. It was set once from a picker
+      // above the table and then unreachable. As a select it is fixed by hand,
+      // filled down with Ctrl+D, and pasted from any other line.
+      {
+        key: 'csi_division',
+        label: 'Div',
+        width: 90,
+        type: 'select',
+        options: divisions.map((division) => ({
+          value: division.code,
+          label: `${division.code} · ${division.title}`,
+        })),
+      },
       { key: 'csi_section', label: 'Section', width: 90 },
       { key: 'title', label: 'Title', width: 300 },
       { key: 'description', label: 'Description', width: 360 },
@@ -237,7 +252,7 @@ export function ScopePackages({
   const packageForDivision = useCallback(
     (division: string | null) =>
       packages.find((pkg) => pkg.lead_division === division)?.id ?? UNASSIGNED,
-    [packages, costCodes],
+    [packages, costCodes, divisions],
   );
 
   const rows = useMemo<GridRow[]>(() => {
@@ -798,10 +813,7 @@ export function ScopePackages({
         // csi_division and package are how an estimator actually describes a
         // set of rows ("the plumbing ones"), so they have to be visible even
         // though package is not directly writable here.
-        columns={[
-          { key: 'csi_division', label: 'Div' },
-          ...columns,
-        ]}
+        columns={columns}
         onApplied={() => void load().then(() => onChanged?.())}
         onError={onError}
         placeholder={

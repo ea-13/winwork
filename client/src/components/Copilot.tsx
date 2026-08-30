@@ -40,6 +40,20 @@ const URGENCY: Record<string, { dot: string; label: string }> = {
  * The ordering is rules over real state, not a model's guess — see
  * server/src/lib/suggestions.ts.
  */
+/**
+ * Remembered per browser. Advice you did not ask for, that reappears expanded
+ * on every screen, stops being advice and becomes furniture you read past.
+ */
+const OPEN_KEY = 'winprojects.copilot.open';
+
+const readOpen = (): boolean => {
+  try {
+    return window.localStorage.getItem(OPEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
 export function Copilot({
   projectId,
   refreshKey,
@@ -50,7 +64,7 @@ export function Copilot({
   onDid?: () => void;
 }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(readOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -108,7 +122,17 @@ export function Copilot({
   return (
     <section className="rounded-xl border border-ink-200 bg-white">
       <button
-        onClick={() => setOpen((value) => !value)}
+        onClick={() =>
+          setOpen((value) => {
+            const next = !value;
+            try {
+              window.localStorage.setItem(OPEN_KEY, next ? '1' : '0');
+            } catch {
+              // A browser refusing storage still gets a working toggle.
+            }
+            return next;
+          })
+        }
         className="flex w-full items-center justify-between px-4 py-2.5 text-left"
       >
         <span className="flex items-baseline gap-2">

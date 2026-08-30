@@ -29,12 +29,27 @@ import { columnLetter, evaluateFormula, isFormula } from '../lib/formula';
 
 export type CellType = 'text' | 'number' | 'currency' | 'date' | 'select' | 'tags';
 
+/**
+ * A choice in a select column.
+ *
+ * A bare string is both the stored value and the label, which is right when
+ * they are the same thing. `{ value, label }` is for when they are not — a CSI
+ * division is stored as "22" because that is what every join and every export
+ * expects, but a dropdown reading "22 · Plumbing" is the one a person can use.
+ */
+export type GridOption = string | { value: string; label: string };
+
+const optionValue = (option: GridOption): string =>
+  typeof option === 'string' ? option : option.value;
+const optionLabel = (option: GridOption): string =>
+  typeof option === 'string' ? option : option.label;
+
 export type GridColumn = {
   key: string;
   label: string;
   type?: CellType;
   width?: number;
-  options?: readonly string[];
+  options?: readonly GridOption[];
   editable?: boolean;
   /** Shown under the header, e.g. a unit. */
   hint?: string;
@@ -102,6 +117,38 @@ const key = (cell: Cell): string => `${cell.r}:${cell.c}`;
 
 /** Marks a row that exists only on screen until somebody types into it. */
 const PHANTOM = '__blank__';
+
+/**
+ * Matches pasted text to one of a select column's choices.
+ *
+ * Exact value, then label, then case-insensitively, then the leading token —
+ * which is what catches "22 - Plumbing" and "22 Plumbing" pasted out of a
+ * spreadsheet where somebody typed the trade name after the code. Blank clears
+ * the cell, because clearing is a real thing to want. Anything else returns
+ * null and the cell is left alone.
+ */
+function resolveOption(text: string, options: readonly GridOption[]): string | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return '';
+
+  const values = options.map(optionValue);
+  if (values.includes(trimmed)) return trimmed;
+
+  const byLabel = options.find((option) => optionLabel(option) === trimmed);
+  if (byLabel) return optionValue(byLabel);
+
+  const lower = trimmed.toLowerCase();
+  const insensitive = options.find(
+    (option) =>
+      optionValue(option).toLowerCase() === lower || optionLabel(option).toLowerCase() === lower,
+  );
+  if (insensitive) return optionValue(insensitive);
+
+  const head = trimmed.split(/[\s·\-—:]+/)[0] ?? '';
+  if (head !== '' && values.includes(head)) return head;
+
+  return null;
+}
 
 // ---------------------------------------------------------------- formatting
 
@@ -456,7 +503,20 @@ export function Grid({
           const column = columns[c];
           if (!column || column.editable === false) continue;
 
-          const value = parse(cellText, column.type);
+          let value = parse(cellText, column.type);
+
+          // Pasting into a select has to land on a real choice or not at all.
+          // Copying a division column gives "22"; copying the same column out
+          // of somebody's Excel might give "22 - Plumbing" or " 22 ". All three
+          // mean 22. Anything that resolves to none of the options is skipped
+          // rather than written, because a column with a fixed set of values is
+          // exactly where junk does the most damage downstream.
+          if (column.type === 'select' && column.options) {
+            const resolved = resolveOption(String(value ?? ''), column.options);
+            if (resolved === null) continue;
+            value = resolved;
+          }
+
           const before = row[column.key] ?? null;
           if (JSON.stringify(before) === JSON.stringify(value)) continue;
 
@@ -782,8 +842,8 @@ export function Grid({
                           >
                             <option value="" />
                             {(column.options ?? []).map((option) => (
-                              <option key={option} value={option}>
-                                {option}
+                              <option key={optionValue(option)} value={optionValue(option)}>
+                                {optionLabel(option)}
                               </option>
                             ))}
                           </select>
