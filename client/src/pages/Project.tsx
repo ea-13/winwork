@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { BuyoutLog } from '../components/BuyoutLog';
+import { BuyoutLog, type BuyoutView } from '../components/BuyoutLog';
 import { ChainNav, type ChainStep } from '../components/ChainNav';
 import { Copilot } from '../components/Copilot';
 import { DocumentDrop } from '../components/DocumentDrop';
@@ -31,6 +31,24 @@ export function ProjectPage() {
   const step: ChainStep = isProjectStep(params.get('step'))
     ? (params.get('step') as ChainStep)
     : 'documents';
+
+  // Buyout and levelling are one step with two views. Keeping the choice in
+  // the URL means a link lands on the one you meant, and a reload does not
+  // quietly put you back on the money grid mid-bid-day.
+  const buyoutView: BuyoutView = params.get('view') === 'leveling' ? 'leveling' : 'buyout';
+
+  const setBuyoutView = useCallback(
+    (next: BuyoutView) => {
+      setParams((current) => {
+        const updated = new URLSearchParams(current);
+        updated.set('step', 'buyout');
+        if (next === 'buyout') updated.delete('view');
+        else updated.set('view', next);
+        return updated;
+      });
+    },
+    [setParams],
+  );
 
   const setStep = useCallback(
     (next: ChainStep) => {
@@ -96,7 +114,14 @@ export function ProjectPage() {
         <PackageOverview projectId={projectId} onError={setError} />
       )}
 
-      {step === 'buyout' && <BuyoutLog projectId={projectId} onError={setError} />}
+      {step === 'buyout' && (
+        <BuyoutLog
+          projectId={projectId}
+          onError={setError}
+          view={buyoutView}
+          onViewChange={setBuyoutView}
+        />
+      )}
     </Layout>
   );
 }

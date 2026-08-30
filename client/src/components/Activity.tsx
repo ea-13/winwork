@@ -134,6 +134,23 @@ export function Activity({ onError }: { onError?: (message: string | null) => vo
             </button>
           )}
 
+          {/* A finished job that did not succeed is otherwise a dead end —
+              the payload that would do the work is sitting right there, and
+              the only way forward was to go find whichever screen started it.
+              This queues a fresh job at the front; the failed run keeps its
+              error, because that is the thing you would want on the fourth
+              failure. */}
+          {kind === 'finished' && job.status !== 'DONE' && (
+            <button
+              onClick={() => void act(job.id, 'retry')}
+              disabled={busy === job.id}
+              className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-ink-500 hover:bg-ink-100 disabled:opacity-30"
+              title="Queue it again at the front. The failed run and its error are kept."
+            >
+              run again
+            </button>
+          )}
+
           {(kind === 'running' || kind === 'queued') && (
             <button
               onClick={() => void act(job.id, 'cancel')}

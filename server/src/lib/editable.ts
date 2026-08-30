@@ -76,7 +76,11 @@ export const EDITABLE: Record<string, readonly string[]> = {
 
   benchmark_range: ['csi_section', 'description', 'unit', 'low', 'high', 'is_calibrated'],
 
-  past_project: ['name', 'gc_name', 'contract_value', 'completed_at'],
+  // project_id links a finished job to the project its bid set was
+  // reconstructed in. That link is the whole backtest — without it there is
+  // no baseline to have missed anything against — and setting it is an
+  // ordinary human edit, not a gate crossing.
+  past_project: ['name', 'gc_name', 'contract_value', 'completed_at', 'project_id'],
 
   change_order: ['co_number', 'amount', 'description', 'stated_reason', 'issued_at',
     // The hindsight verdict itself moves through its own endpoint, which

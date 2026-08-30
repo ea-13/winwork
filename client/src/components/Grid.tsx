@@ -629,13 +629,13 @@ export function Grid({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400">
+      <div className="rounded-lg border border-ink-200 bg-white px-4 py-10 text-center text-sm text-ink-400">
         {emptyMessage ?? 'Nothing here yet.'}
         {onAddRow && (
           <div className="mt-3">
             <button
               onClick={() => void onAddRow()}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
+              className="rounded-md border border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700"
             >
               Add row
             </button>
@@ -653,29 +653,29 @@ export function Grid({
         onKeyDown={onKeyDown}
         onCopy={onCopy}
         onPaste={onPaste}
-        className="overflow-auto rounded-lg border border-slate-300 bg-white outline-none focus:border-slate-400"
+        className="overflow-auto rounded-lg border border-ink-300 bg-white outline-none focus:border-ink-400"
         style={{ maxHeight: '65vh' }}
       >
         <table className="border-collapse text-[13px]" style={{ tableLayout: 'fixed' }}>
           <thead className="sticky top-0 z-10">
             <tr>
-              <th className="sticky left-0 z-20 w-12 border-b border-r border-slate-300 bg-slate-100 px-2 py-1.5 text-xs font-normal text-slate-400">
+              <th className="sticky left-0 z-20 w-12 border-b border-r border-ink-300 bg-ink-100 px-2 py-1.5 text-xs font-normal text-ink-400">
                 #
               </th>
               {columns.map((column, index) => (
                 <th
                   key={column.key}
                   style={{ width: column.width ?? 160, minWidth: column.width ?? 160 }}
-                  className="border-b border-r border-slate-300 bg-slate-100 px-2 py-1.5 text-left text-xs font-semibold text-slate-700"
+                  className="border-b border-r border-ink-300 bg-ink-100 px-2 py-1.5 text-left text-xs font-semibold text-ink-700"
                 >
                   <span className="flex items-baseline gap-1.5">
-                    <span className="text-[10px] font-normal text-slate-400">
+                    <span className="text-[10px] font-normal text-ink-400">
                       {columnLetter(index)}
                     </span>
                     {column.label}
                   </span>
                   {column.hint && (
-                    <span className="font-normal text-slate-400">{column.hint}</span>
+                    <span className="font-normal text-ink-400">{column.hint}</span>
                   )}
                 </th>
               ))}
@@ -691,7 +691,7 @@ export function Grid({
                   <tr>
                     <td
                       colSpan={columns.length + 1}
-                      className="sticky left-0 border-b border-t border-slate-300 bg-slate-100 px-2 py-1"
+                      className="sticky left-0 border-b border-t border-ink-300 bg-ink-100 px-2 py-1"
                     >
                       {renderGroup(
                         groupOf(row),
@@ -719,14 +719,14 @@ export function Grid({
                     setLastPick(r);
                     onPick(next);
                   }}
-                  className={`sticky left-0 z-10 border-b border-r border-slate-200 px-2 py-1 text-right text-xs ${
-                    onPick && !isPhantom(row) ? 'cursor-pointer hover:bg-slate-200' : ''
+                  className={`sticky left-0 z-10 border-b border-r border-ink-200 px-2 py-1 text-right text-xs ${
+                    onPick && !isPhantom(row) ? 'cursor-pointer hover:bg-ink-200' : ''
                   } ${
                     picked
-                      ? 'bg-slate-900 font-medium text-white'
+                      ? 'bg-ink-900 font-medium text-white'
                       : isPhantom(row)
-                        ? 'bg-white text-slate-300'
-                        : 'bg-slate-50 text-slate-400'
+                        ? 'bg-white text-ink-300'
+                        : 'bg-ink-50 text-ink-400'
                   }`}
                   title={onPick && !isPhantom(row) ? 'Click to pick this row · shift-click for a range' : undefined}
                 >
@@ -754,10 +754,10 @@ export function Grid({
                       onDoubleClick={() => beginEdit({ r, c })}
                       title={errors[`${r}:${c}`]}
                       className={[
-                        'relative border-b border-r border-slate-200 px-2 py-1 align-top',
-                        locked ? 'bg-slate-50 text-slate-500' : 'bg-white text-slate-900',
+                        'relative border-b border-r border-ink-200 px-2 py-1 align-top',
+                        locked ? 'bg-ink-50 text-ink-500' : 'bg-white text-ink-900',
                         tone === 'review' ? 'bg-flag-50 text-ink-900' : '',
-                        tone === 'muted' ? 'bg-slate-50 text-slate-400' : '',
+                        tone === 'muted' ? 'bg-ink-50 text-ink-400' : '',
                         picked ? 'bg-sky-100' : '',
                         selected && !isActive ? 'bg-sky-50' : '',
                         column.type === 'number' || column.type === 'currency' ? 'text-right' : '',
@@ -821,7 +821,7 @@ export function Grid({
         </table>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-slate-400">
+      <div className="flex items-center justify-between text-xs text-ink-400">
         <span>
           Type to replace · F2 or double-click to edit · Enter down · Tab right · Shift+arrows select
           · Ctrl+C/V with Excel · Ctrl+D fill down · Ctrl+Z undo
@@ -830,7 +830,7 @@ export function Grid({
         {onAddRow && (
           <button
             onClick={() => void onAddRow()}
-            className="rounded-md border border-slate-300 px-2.5 py-1 font-medium text-slate-700"
+            className="rounded-md border border-ink-300 px-2.5 py-1 font-medium text-ink-700"
           >
             + Add row
           </button>

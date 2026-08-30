@@ -86,9 +86,71 @@ hindsightRouter.get('/past-projects/:pastProjectId/hindsight', async (req, res) 
   const { data: gaps } = packageIds.length
     ? await db
         .from('scope_gap')
-        .select('id, scope_item_id, gap_type, severity, exposure_amount')
+        .select('id, scope_item_id, gap_type, severity, exposure_amount, package_id')
         .in('package_id', packageIds)
     : { data: [] as Record<string, unknown>[] };
+
+  // The two halves of the answer this screen exists to give.
+  //
+  //   What the scope of work includes — the baseline reconstructed from the
+  //   drawings and specs of a job that is already finished.
+  //   What the bidders missed — the scope in that baseline nobody priced.
+  //
+  // Both are read from the linked project, because "load its bid set as if it
+  // were precon" is not a metaphor: it is a real project in this system, run
+  // through the same chain as a live one. If nothing is linked, both are empty
+  // and the screen says so rather than showing zeroes as though they were
+  // findings.
+  const { data: allScope } = past.project_id
+    ? await db
+        .from('scope_item')
+        .select('id, scope_id, csi_division, title, is_locked')
+        .eq('project_id', past.project_id)
+    : { data: [] as Record<string, unknown>[] };
+
+  const scopeRows = (allScope ?? []) as {
+    id: string;
+    scope_id: string;
+    csi_division: string | null;
+    title: string;
+    is_locked: boolean;
+  }[];
+
+  const byDivision = new Map<string, { division: string; items: number; gaps: number }>();
+  for (const item of scopeRows) {
+    const division = item.csi_division ?? '—';
+    const entry = byDivision.get(division) ?? { division, items: 0, gaps: 0 };
+    entry.items += 1;
+    byDivision.set(division, entry);
+  }
+
+  const scopeIndex = new Map(scopeRows.map((item) => [item.id, item]));
+
+  // A gap a change order landed on is the whole argument: it was missed at bid
+  // time, and it came back as money. Anything else is a gap that was caught in
+  // precon or never mattered, and conflating the two would inflate the claim.
+  const gapsWithCO = new Set(
+    orders.map((order) => order.matched_gap_id as string | null).filter(Boolean) as string[],
+  );
+
+  const missedScope = (gaps ?? []).map((gap) => {
+    const item = scopeIndex.get(gap.scope_item_id as string);
+    if (item) {
+      const entry = byDivision.get(item.csi_division ?? '—');
+      if (entry) entry.gaps += 1;
+    }
+    return {
+      id: gap.id as string,
+      severity: (gap.severity as string | null) ?? null,
+      gapType: (gap.gap_type as string | null) ?? null,
+      exposure: gap.exposure_amount === null ? null : Number(gap.exposure_amount),
+      scopeId: item?.scope_id ?? null,
+      division: item?.csi_division ?? null,
+      title: item?.title ?? null,
+      // Did this one actually come back as a change order?
+      becameChangeOrder: gapsWithCO.has(gap.id as string),
+    };
+  });
 
   const scopeIds = [
     ...new Set(orders.map((order) => order.scope_item_id as string | null).filter(Boolean)),
@@ -116,6 +178,22 @@ hindsightRouter.get('/past-projects/:pastProjectId/hindsight', async (req, res) 
   res.json({
     pastProject: past,
     detectedGaps: (gaps ?? []).length,
+    /** What the scope of work includes, reconstructed from the bid set. */
+    scope: {
+      total: scopeRows.length,
+      locked: scopeRows.filter((item) => item.is_locked).length,
+      byDivision: [...byDivision.values()].sort((a, b) => a.division.localeCompare(b.division)),
+    },
+    /** What the bidders missed — scope in that baseline nobody priced. */
+    missedScope: missedScope.sort((a, b) => {
+      const rank = (severity: string | null) =>
+        severity === 'CRITICAL' ? 0 : severity === 'HIGH' ? 1 : severity === 'MEDIUM' ? 2 : 3;
+      return (
+        Number(b.becameChangeOrder) - Number(a.becameChangeOrder) ||
+        rank(a.severity) - rank(b.severity) ||
+        (b.exposure ?? 0) - (a.exposure ?? 0)
+      );
+    }),
     totals: {
       changeOrders: orders.length,
       value: money(orders),

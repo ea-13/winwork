@@ -265,8 +265,45 @@ agentRunsRouter.get('/projects/:projectId/runs/active', async (req, res) => {
 
   const runs = data ?? [];
 
+  // The job behind each run, so the panel can act on it rather than only watch
+  // it. Cancelling, reprioritising and retrying are all operations on the JOB;
+  // the run is what the job produced. Without this the status light was a
+  // status light and nothing more.
+  const { data: jobs } = runs.length
+    ? await supabaseForUser(auth.token)
+        .from('job')
+        .select('id, status, priority, attempts, max_attempts, last_error, cancelled_at, agent_run_id')
+        .in('agent_run_id', runs.map((run) => run.id as string))
+    : { data: [] as Record<string, unknown>[] };
+
+  const jobByRun = new Map(
+    (jobs ?? []).map((job) => [
+      job.agent_run_id as string,
+      {
+        jobId: job.id as string,
+        jobStatus: job.cancelled_at ? 'CANCELLED' : (job.status as string),
+        priority: Number(job.priority ?? 0),
+        attempts: Number(job.attempts ?? 0),
+        maxAttempts: Number(job.max_attempts ?? 3),
+        lastError: (job.last_error as string | null) ?? null,
+      },
+    ]),
+  );
+
+  const withJob = runs.map((run) => ({
+    ...run,
+    ...(jobByRun.get(run.id as string) ?? {
+      jobId: null,
+      jobStatus: null,
+      priority: 0,
+      attempts: 0,
+      maxAttempts: 3,
+      lastError: null,
+    }),
+  }));
+
   res.json({
-    running: runs.filter((run) => run.status === 'QUEUED' || run.status === 'RUNNING'),
-    recentlyFinished: runs.filter((run) => run.status === 'DONE' || run.status === 'FAILED'),
+    running: withJob.filter((run) => run.status === 'QUEUED' || run.status === 'RUNNING'),
+    recentlyFinished: withJob.filter((run) => run.status === 'DONE' || run.status === 'FAILED'),
   });
 });

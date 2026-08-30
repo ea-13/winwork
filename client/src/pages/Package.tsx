@@ -120,8 +120,8 @@ export function PackagePage() {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">{pkg?.name ?? 'Package'}</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-lg font-semibold text-ink-900">{pkg?.name ?? 'Package'}</h1>
+          <p className="text-sm text-ink-500">
             {pkg?.status}
             {(pkg?.csi_divisions?.length ?? 0) > 1 &&
               ` · divisions ${pkg?.csi_divisions?.join(', ')}`}
@@ -136,7 +136,7 @@ export function PackagePage() {
               setError(result.note);
             })
           }
-          className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
+          className="shrink-0 rounded-md border border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700"
           title="Extracts every un-read quote, then parks everything in the review queue. Crosses no gate."
         >
           Autopilot
@@ -184,7 +184,7 @@ export function PackagePage() {
             }}
             onClick={() => picker.current?.click()}
             className={`cursor-pointer rounded-lg border-2 border-dashed px-4 py-8 text-center text-sm transition ${
-              dragging ? 'border-slate-900 bg-white text-slate-900' : 'border-slate-300 text-slate-500'
+              dragging ? 'border-ink-900 bg-white text-ink-900' : 'border-ink-300 text-ink-500'
             }`}
           >
             <span className="font-medium">Drop sub bids here</span>
@@ -203,25 +203,25 @@ export function PackagePage() {
           />
 
           {queue.length > 0 && (
-            <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+            <div className="divide-y divide-ink-100 rounded-lg border border-ink-200 bg-white">
               {queue.map((state) => {
                 const percent = Math.round(state.progress * 100);
                 return (
                   <div key={state.id} className="px-3 py-2">
                     <div className="flex items-baseline justify-between gap-3 text-xs">
-                      <span className="truncate text-slate-700">{state.file.name}</span>
-                      <span className="shrink-0 tabular-nums text-slate-400">
+                      <span className="truncate text-ink-700">{state.file.name}</span>
+                      <span className="shrink-0 tabular-nums text-ink-400">
                         {state.status === 'DONE' ? 'done' : `${percent}%`}
                       </span>
                     </div>
-                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-200">
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink-200">
                       <div
                         className={`h-full transition-all duration-150 ${
                           state.status === 'FAILED'
                             ? 'bg-red-500'
                             : state.status === 'DONE'
                               ? 'bg-emerald-500'
-                              : 'bg-slate-900'
+                              : 'bg-ink-900'
                         }`}
                         style={{ width: `${Math.max(percent, 2)}%` }}
                       />

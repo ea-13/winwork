@@ -129,15 +129,15 @@ export function SubsPage() {
     <Layout breadcrumb={<span>Subcontractors</span>}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Subcontractors</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-lg font-semibold text-ink-900">Subcontractors</h1>
+          <p className="text-sm text-ink-500">
             {subs.length} on the list · {unclassified} with no trade assigned
           </p>
         </div>
         <button
           onClick={() => picker.current?.click()}
           disabled={busy}
-          className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-ink-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           Import a list
         </button>
@@ -166,13 +166,13 @@ export function SubsPage() {
       )}
 
       {preview && (
-        <section className="space-y-3 rounded-lg border border-slate-300 bg-white p-4">
+        <section className="space-y-3 rounded-lg border border-ink-300 bg-white p-4">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-sm font-medium text-slate-900">
+              <h2 className="text-sm font-medium text-ink-900">
                 Review before importing — {preview.filename}
               </h2>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-ink-500">
                 Read as <strong>{preview.sourceKind.replace('_', ' ').toLowerCase()}</strong> ·{' '}
                 {preview.rowCount} rows · {preview.importable} importable · {preview.skipped} skipped
                 · <strong>{preview.classified} trade-classified</strong>
@@ -185,23 +185,23 @@ export function SubsPage() {
               )}
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setPreview(null)} className="text-xs text-slate-500 underline">
+              <button onClick={() => setPreview(null)} className="text-xs text-ink-500 underline">
                 cancel
               </button>
               <button
                 onClick={() => void commit()}
                 disabled={busy}
-                className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                className="rounded-md bg-ink-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
                 Import {preview.importable}
               </button>
             </div>
           </div>
 
-          <div className="max-h-80 overflow-auto rounded border border-slate-200">
+          <div className="max-h-80 overflow-auto rounded border border-ink-200">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50">
-                <tr className="text-left text-slate-500">
+              <thead className="sticky top-0 bg-ink-50">
+                <tr className="text-left text-ink-500">
                   <th className="px-2 py-1.5 font-medium">Company</th>
                   <th className="px-2 py-1.5 font-medium">Their words</th>
                   <th className="px-2 py-1.5 font-medium">Divisions</th>
@@ -210,9 +210,9 @@ export function SubsPage() {
               </thead>
               <tbody>
                 {preview.rows.slice(0, 200).map((row, index) => (
-                  <tr key={index} className="border-t border-slate-100">
-                    <td className="px-2 py-1 text-slate-800">{row.name}</td>
-                    <td className="px-2 py-1 text-slate-500">{row.scopeText ?? '—'}</td>
+                  <tr key={index} className="border-t border-ink-100">
+                    <td className="px-2 py-1 text-ink-800">{row.name}</td>
+                    <td className="px-2 py-1 text-ink-500">{row.scopeText ?? '—'}</td>
                     <td className="px-2 py-1">
                       <input
                         value={(assign[index] ?? row.divisions).join(', ')}
@@ -226,10 +226,10 @@ export function SubsPage() {
                           })
                         }
                         placeholder="unassigned"
-                        className="w-28 rounded border border-slate-200 px-1 py-0.5 outline-none focus:border-slate-900"
+                        className="w-28 rounded border border-ink-200 px-1 py-0.5 outline-none focus:border-ink-900"
                       />
                     </td>
-                    <td className="px-2 py-1 text-slate-400">{row.skipReason ?? 'import'}</td>
+                    <td className="px-2 py-1 text-ink-400">{row.skipReason ?? 'import'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -237,17 +237,17 @@ export function SubsPage() {
           </div>
 
           {preview.unmatchedScopes.length > 0 && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-500">
               Trades nothing matched: {preview.unmatchedScopes.slice(0, 10).join(' · ')}
             </p>
           )}
         </section>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-ink-200 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
               <th className="px-4 py-2 font-medium">Company</th>
               <th className="px-4 py-2 font-medium">Divisions</th>
               <th className="px-4 py-2 font-medium">Contact</th>
@@ -257,26 +257,26 @@ export function SubsPage() {
           </thead>
           <tbody>
             {subs.slice(0, 300).map((sub) => (
-              <tr key={sub.id} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-2 font-medium text-slate-900">{sub.name}</td>
-                <td className="px-4 py-2 font-mono text-xs text-slate-600">
+              <tr key={sub.id} className="border-b border-ink-100 last:border-0">
+                <td className="px-4 py-2 font-medium text-ink-900">{sub.name}</td>
+                <td className="px-4 py-2 font-mono text-xs text-ink-600">
                   {(sub.trade_csi ?? []).join(', ') || (
                     <span className="text-amber-700">unassigned</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-slate-600">
+                <td className="px-4 py-2 text-ink-600">
                   {sub.contact_name ?? '—'}
                   {sub.contact_email && (
-                    <div className="text-xs text-slate-400">{sub.contact_email}</div>
+                    <div className="text-xs text-ink-400">{sub.contact_email}</div>
                   )}
                 </td>
-                <td className="px-4 py-2 text-xs text-slate-500">{sub.prequal_status ?? '—'}</td>
-                <td className="px-4 py-2 text-right text-slate-600">{sub.emr ?? '—'}</td>
+                <td className="px-4 py-2 text-xs text-ink-500">{sub.prequal_status ?? '—'}</td>
+                <td className="px-4 py-2 text-right text-ink-600">{sub.emr ?? '—'}</td>
               </tr>
             ))}
             {subs.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-sm text-slate-400">
+                <td colSpan={5} className="px-4 py-6 text-sm text-ink-400">
                   No subcontractors yet. Import a list.
                 </td>
               </tr>
@@ -285,7 +285,7 @@ export function SubsPage() {
         </table>
       </div>
       {subs.length > 300 && (
-        <p className="text-xs text-slate-400">Showing the first 300 of {subs.length}.</p>
+        <p className="text-xs text-ink-400">Showing the first 300 of {subs.length}.</p>
       )}
     </Layout>
   );

@@ -46,11 +46,11 @@ const KINDS = [
   { value: 'INTERFACE', label: 'Interface', style: 'bg-violet-100 text-violet-800' },
   { value: 'ASSUMPTION', label: 'Assumes', style: 'bg-sky-100 text-sky-800' },
   { value: 'RISK', label: 'Risk', style: 'bg-amber-100 text-amber-800' },
-  { value: 'BASIS_OF_DESIGN', label: 'Basis', style: 'bg-slate-200 text-slate-700' },
+  { value: 'BASIS_OF_DESIGN', label: 'Basis', style: 'bg-ink-200 text-ink-700' },
 ] as const;
 
 const styleFor = (kind: string) =>
-  KINDS.find((entry) => entry.value === kind)?.style ?? 'bg-slate-100 text-slate-600';
+  KINDS.find((entry) => entry.value === kind)?.style ?? 'bg-ink-100 text-ink-600';
 
 const labelFor = (kind: string) =>
   KINDS.find((entry) => entry.value === kind)?.label ?? kind.toLowerCase();
@@ -77,7 +77,7 @@ function TrackRecord({ record }: { record: Record_ }) {
   const tested = record.caughtGap + record.pricedByAll + record.changeOrders;
 
   if (tested === 0) {
-    return <span className="text-[11px] text-slate-300">not yet tested</span>;
+    return <span className="text-[11px] text-ink-300">not yet tested</span>;
   }
 
   return (
@@ -93,7 +93,7 @@ function TrackRecord({ record }: { record: Record_ }) {
         </span>
       )}
       {record.pricedByAll > 0 && (
-        <span className="text-slate-400" title="Every bidder carried it and nothing came loose">
+        <span className="text-ink-400" title="Every bidder carried it and nothing came loose">
           held {record.pricedByAll}
         </span>
       )}
@@ -186,11 +186,11 @@ export function ScopeContext({
   const retired = lines.filter((line) => !line.is_active);
 
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+    <div className="space-y-2 rounded-lg border border-ink-200 bg-ink-50/60 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium text-slate-700">
+        <p className="text-xs font-medium text-ink-700">
           What {scopeLabel} actually means
-          <span className="ml-2 font-normal text-slate-400">
+          <span className="ml-2 font-normal text-ink-400">
             {active.length} line{active.length === 1 ? '' : 's'}
           </span>
         </p>
@@ -198,14 +198,14 @@ export function ScopeContext({
           {retired.length > 0 && (
             <button
               onClick={() => setShowRetired((current) => !current)}
-              className="text-[11px] text-slate-400 underline"
+              className="text-[11px] text-ink-400 underline"
             >
               {showRetired ? 'hide' : `${retired.length} retired`}
             </button>
           )}
           <button
             onClick={() => setAdding((current) => !current)}
-            className="rounded-md border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700"
+            className="rounded-md border border-ink-300 bg-white px-2 py-0.5 text-xs text-ink-700"
           >
             + line
           </button>
@@ -285,11 +285,11 @@ export function ScopeContext({
       )}
 
       {adding && (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-200 bg-white p-2">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-ink-200 bg-white p-2">
           <select
             value={kind}
             onChange={(event) => setKind(event.target.value)}
-            className="rounded border border-slate-300 px-1.5 py-1 text-xs"
+            className="rounded border border-ink-300 px-1.5 py-1 text-xs"
           >
             {KINDS.map((entry) => (
               <option key={entry.value} value={entry.value}>
@@ -306,12 +306,12 @@ export function ScopeContext({
               if (event.key === 'Escape') setAdding(false);
             }}
             placeholder="Deflection track at head of all full-height partitions"
-            className="min-w-[18rem] flex-1 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-slate-900"
+            className="min-w-[18rem] flex-1 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-900"
           />
           <button
             onClick={() => void add()}
             disabled={busy || text.trim() === ''}
-            className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+            className="rounded-md bg-ink-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
           >
             Add
           </button>
@@ -319,7 +319,7 @@ export function ScopeContext({
       )}
 
       {active.length === 0 && !adding && (
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-ink-400">
           Nothing written yet. Draft it from the Scope step, or add the first line by hand — this
           is what a sub&apos;s quote gets checked against.
         </p>
@@ -327,7 +327,7 @@ export function ScopeContext({
 
       <ul className="space-y-1.5">
         {active.map((line) => (
-          <li key={line.id} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+          <li key={line.id} className="rounded-md border border-ink-200 bg-white px-2.5 py-1.5">
             <div className="flex items-start gap-2">
               <span
                 className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${styleFor(line.kind)}`}
@@ -346,12 +346,12 @@ export function ScopeContext({
                       if (event.key === 'Enter') void saveEdit();
                       if (event.key === 'Escape') setEditing(null);
                     }}
-                    className="w-full rounded border border-slate-900 px-1 py-0.5 text-xs outline-none"
+                    className="w-full rounded border border-ink-900 px-1 py-0.5 text-xs outline-none"
                   />
                 ) : (
                   <p
                     onClick={() => setEditing({ id: line.id, value: line.text })}
-                    className="cursor-text text-xs text-slate-800"
+                    className="cursor-text text-xs text-ink-800"
                   >
                     {line.text}
                   </p>
@@ -359,7 +359,7 @@ export function ScopeContext({
 
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span
-                    className="text-[11px] text-slate-400"
+                    className="text-[11px] text-ink-400"
                     title={ORIGIN_HINT[line.origin] ?? line.origin}
                   >
                     {ORIGIN_HINT[line.origin] ?? line.origin.toLowerCase()}
@@ -368,7 +368,7 @@ export function ScopeContext({
                   <TrackRecord record={line.record} />
                   {line.pattern && line.pattern.times_proposed > 0 && (
                     <span
-                      className="text-[11px] text-slate-400"
+                      className="text-[11px] text-ink-400"
                       title={line.pattern.text}
                     >
                       pattern confirmed {line.pattern.times_confirmed}/
@@ -380,7 +380,7 @@ export function ScopeContext({
 
               <button
                 onClick={() => setRetiring(retiring === line.id ? null : line.id)}
-                className="shrink-0 text-[11px] text-slate-300 hover:text-slate-600"
+                className="shrink-0 text-[11px] text-ink-300 hover:text-ink-600"
                 title="Retire this line"
               >
                 retire
@@ -388,7 +388,7 @@ export function ScopeContext({
             </div>
 
             {retiring === line.id && (
-              <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2">
+              <div className="mt-2 flex items-center gap-1.5 border-t border-ink-100 pt-2">
                 <input
                   autoFocus
                   value={reason}
@@ -398,12 +398,12 @@ export function ScopeContext({
                     if (event.key === 'Escape') setRetiring(null);
                   }}
                   placeholder="Why does this not apply here?"
-                  className="flex-1 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-slate-900"
+                  className="flex-1 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-900"
                 />
                 <button
                   onClick={() => void retire(line.id)}
                   disabled={busy || reason.trim() === ''}
-                  className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+                  className="rounded-md bg-ink-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
                 >
                   Retire
                 </button>
@@ -415,7 +415,7 @@ export function ScopeContext({
 
       {showRetired &&
         retired.map((line) => (
-          <p key={line.id} className="px-2.5 text-[11px] text-slate-400 line-through">
+          <p key={line.id} className="px-2.5 text-[11px] text-ink-400 line-through">
             {labelFor(line.kind)}: {line.text}
             <span className="ml-2 no-underline">— {line.retired_reason}</span>
           </p>

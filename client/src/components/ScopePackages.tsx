@@ -490,7 +490,7 @@ export function ScopePackages({
     const value = pkg[field];
     return (
       <span className="inline-flex items-baseline gap-1">
-        <span className="text-[10px] uppercase text-slate-400">{label}</span>
+        <span className="text-[10px] uppercase text-ink-400">{label}</span>
         {active ? (
           <input
             autoFocus
@@ -501,14 +501,14 @@ export function ScopePackages({
               if (event.key === 'Enter') void savePackage();
               if (event.key === 'Escape') setEditingPackage(null);
             }}
-            className="w-20 rounded border border-slate-900 px-1 text-right text-xs outline-none"
+            className="w-20 rounded border border-ink-900 px-1 text-right text-xs outline-none"
           />
         ) : (
           <button
             onClick={() =>
               setEditingPackage({ id: pkg.id, field, value: value === null ? '' : String(value) })
             }
-            className={`tabular-nums ${value === null ? 'text-slate-300' : 'text-slate-700'}`}
+            className={`tabular-nums ${value === null ? 'text-ink-300' : 'text-ink-700'}`}
           >
             {money(value)}
           </button>
@@ -521,7 +521,7 @@ export function ScopePackages({
     if (groupKey === UNASSIGNED) {
       return (
         <div className="flex items-center gap-3">
-          <button onClick={() => toggle(groupKey)} className="w-4 text-slate-500">
+          <button onClick={() => toggle(groupKey)} className="w-4 text-ink-500">
             {collapsed.has(groupKey) ? '▸' : '▾'}
           </button>
           <span className="text-xs font-semibold text-amber-800">
@@ -540,15 +540,15 @@ export function ScopePackages({
 
     return (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <button onClick={() => toggle(groupKey)} className="w-4 text-slate-500">
+        <button onClick={() => toggle(groupKey)} className="w-4 text-ink-500">
           {collapsed.has(groupKey) ? '▸' : '▾'}
         </button>
 
-        <span className="text-xs font-semibold text-slate-900">
-          <span className="font-mono text-slate-500">{pkg.lead_division ?? '—'}</span> · {pkg.name}
+        <span className="text-xs font-semibold text-ink-900">
+          <span className="font-mono text-ink-500">{pkg.lead_division ?? '—'}</span> · {pkg.name}
         </span>
 
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-ink-400">
           {rowsInGroup.length} item{rowsInGroup.length === 1 ? '' : 's'}
         </span>
 
@@ -564,18 +564,18 @@ export function ScopePackages({
                 setNoteDraft(pkg.notes ?? '');
               }}
               className={`max-w-[14rem] truncate text-[11px] ${
-                pkg.notes ? 'text-slate-600 underline' : 'text-slate-300'
+                pkg.notes ? 'text-ink-600 underline' : 'text-ink-300'
               }`}
             >
               {pkg.notes ?? '+ note'}
             </button>
           )}
-          <Link to={`/packages/${pkg.id}`} className="text-[11px] text-slate-500 underline">
+          <Link to={`/packages/${pkg.id}`} className="text-[11px] text-ink-500 underline">
             bids
           </Link>
           <button
             onClick={() => void guard(async () => { await apiDelete(`/packages/${pkg.id}`); })}
-            className="text-[11px] text-slate-300 hover:text-red-600"
+            className="text-[11px] text-ink-300 hover:text-red-600"
             title="Refused once anything has been bid against it"
           >
             remove
@@ -598,11 +598,11 @@ export function ScopePackages({
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-slate-600">
+        <div className="text-sm text-ink-600">
           {items.length} scope item{items.length === 1 ? '' : 's'} in {packages.length} package
           {packages.length === 1 ? '' : 's'}
           {locked > 0 && (
-            <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
+            <span className="ml-2 rounded bg-ink-100 px-1.5 py-0.5 text-xs text-ink-500">
               {locked} locked
             </span>
           )}
@@ -614,7 +614,7 @@ export function ScopePackages({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          <label className="flex items-center gap-1.5 text-xs text-ink-500">
             <input
               type="checkbox"
               checked={showNotes}
@@ -633,7 +633,7 @@ export function ScopePackages({
                   : new Set([...packages.map((pkg) => pkg.id), UNASSIGNED]),
               )
             }
-            className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600"
+            className="rounded-md border border-ink-300 px-2 py-1 text-xs text-ink-600"
           >
             {collapsed.size > 0 ? 'Expand all' : 'Collapse all'}
           </button>
@@ -648,7 +648,7 @@ export function ScopePackages({
               })
             }
             disabled={busy || items.length === 0}
-            className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 disabled:opacity-40"
+            className="rounded-md border border-ink-300 px-2.5 py-1 text-xs font-medium text-ink-700 disabled:opacity-40"
             title="Writes what each item includes, excludes and assumes"
           >
             Draft context
@@ -756,7 +756,7 @@ export function ScopePackages({
       )}
 
       {adding && (
-        <div className="flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap gap-1.5 rounded-lg border border-ink-200 bg-white p-3">
           {divisions.map((division) => (
             <button
               key={division.code}
@@ -769,8 +769,8 @@ export function ScopePackages({
               disabled={busy}
               className={`rounded-md border px-2 py-1 text-xs disabled:opacity-40 ${
                 usedDivisions.has(division.code)
-                  ? 'border-slate-200 text-slate-400'
-                  : 'border-slate-300 text-slate-700'
+                  ? 'border-ink-200 text-ink-400'
+                  : 'border-ink-300 text-ink-700'
               }`}
               title={
                 usedDivisions.has(division.code)
@@ -1000,12 +1000,12 @@ export function ScopePackages({
       )}
 
       {noteFor && (
-        <aside className="fixed bottom-6 right-6 z-30 w-80 rounded-lg border border-slate-300 bg-white shadow-xl">
-          <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-            <p className="text-xs font-medium text-slate-900">
+        <aside className="fixed bottom-6 right-6 z-30 w-80 rounded-lg border border-ink-300 bg-white shadow-xl">
+          <header className="flex items-center justify-between border-b border-ink-200 px-3 py-2">
+            <p className="text-xs font-medium text-ink-900">
               {packageById.get(noteFor)?.name ?? 'Package'} · notes
             </p>
-            <button onClick={() => setNoteFor(null)} className="text-xs text-slate-400">
+            <button onClick={() => setNoteFor(null)} className="text-xs text-ink-400">
               close
             </button>
           </header>
@@ -1015,9 +1015,9 @@ export function ScopePackages({
             onChange={(event) => setNoteDraft(event.target.value)}
             rows={6}
             placeholder="Why the budget, allowance and contingency are what they are."
-            className="w-full resize-none px-3 py-2 text-xs outline-none placeholder:text-slate-300"
+            className="w-full resize-none px-3 py-2 text-xs outline-none placeholder:text-ink-300"
           />
-          <footer className="flex justify-end border-t border-slate-200 px-3 py-2">
+          <footer className="flex justify-end border-t border-ink-200 px-3 py-2">
             <button
               onClick={() =>
                 void guard(async () => {
@@ -1027,7 +1027,7 @@ export function ScopePackages({
                   setNoteFor(null);
                 })
               }
-              className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white"
+              className="rounded-md bg-ink-900 px-2.5 py-1 text-xs font-medium text-white"
             >
               Save note
             </button>
@@ -1035,12 +1035,12 @@ export function ScopePackages({
         </aside>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-        <span className="text-xs text-slate-500">Context for</span>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-2">
+        <span className="text-xs text-ink-500">Context for</span>
         <select
           value={contextFor ?? ''}
           onChange={(event) => setContextFor(event.target.value || null)}
-          className="max-w-lg flex-1 rounded border border-slate-300 px-2 py-1 text-xs"
+          className="max-w-lg flex-1 rounded border border-ink-300 px-2 py-1 text-xs"
         >
           <option value="">Pick a scope item…</option>
           {items.map((item) => (

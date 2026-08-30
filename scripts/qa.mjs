@@ -414,6 +414,26 @@ check('the queue reads', queue.status === 200 && Array.isArray(queue.body.queued
 const ghostCancel = await api('/jobs/00000000-0000-0000-0000-000000000000/cancel', 'POST');
 check('cancelling an unknown job 404s', ghostCancel.status === 404);
 
+const retryUnknown = await api('/jobs/00000000-0000-0000-0000-000000000000/retry', 'POST');
+check('requeueing an unknown job 404s', retryUnknown.status === 404);
+
+// A job that has not finished cannot be requeued — that would mean two of the
+// same work in flight, spending twice.
+const liveJobs = await api('/queue');
+const inFlight = [...(liveJobs.body?.running ?? []), ...(liveJobs.body?.queued ?? [])][0];
+if (inFlight) {
+  const tooSoon = await api(`/jobs/${inFlight.id}/retry`, 'POST');
+  check('requeueing a job still in flight is refused', tooSoon.status === 409);
+}
+
+const doneJob = (liveJobs.body?.finished ?? []).find((job) => job.status !== 'DONE');
+if (doneJob) {
+  const again = await api(`/jobs/${doneJob.id}/retry`, 'POST');
+  check('a failed job can be requeued', again.status === 200, JSON.stringify(again.body).slice(0, 100));
+  check('it goes in at the front', (again.body?.priority ?? 0) > 0);
+  if (again.status === 200) await admin(`job?id=eq.${again.body.id}`, 'DELETE');
+}
+
 // --------------------------------------------------------------- workspaces
 
 section('Workspaces and cost codes');

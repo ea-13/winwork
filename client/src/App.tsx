@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useSession } from './lib/session';
 import { ActivityPage } from './pages/ActivityPage';
-import { ArchaeologyPage } from './pages/Archaeology';
 import { CostCodesPage } from './pages/CostCodes';
 import { HindsightPage } from './pages/Hindsight';
 import { Login } from './pages/Login';
@@ -18,7 +17,7 @@ function Protected({ children }: { children: ReactNode }) {
   // Wait for the stored session to be read back before deciding, or a reload
   // bounces an authenticated user to the login screen.
   if (loading) {
-    return <div className="p-8 text-sm text-slate-400">Loading…</div>;
+    return <div className="p-8 text-sm text-ink-400">Loading…</div>;
   }
   return session ? <>{children}</> : <Navigate to="/login" replace />;
 }
@@ -93,14 +92,6 @@ export default function App() {
         element={
           <Protected>
             <HindsightPage />
-          </Protected>
-        }
-      />
-      <Route
-        path="/archaeology"
-        element={
-          <Protected>
-            <ArchaeologyPage />
           </Protected>
         }
       />

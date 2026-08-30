@@ -141,8 +141,8 @@ function GapRow({
       <tr className={`border-t border-ink-100 text-xs ${coverageStyle(gap)}`}>
         <td />
         <td className="py-1.5 pl-8 pr-3">
-          <span className="font-mono text-[11px] text-slate-400">{gap.scopeId ?? '—'}</span>
-          <span className="ml-2 text-slate-700">{gap.scopeTitle ?? 'Unnamed scope item'}</span>
+          <span className="font-mono text-[11px] text-ink-400">{gap.scopeId ?? '—'}</span>
+          <span className="ml-2 text-ink-700">{gap.scopeTitle ?? 'Unnamed scope item'}</span>
           <span
             className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-medium ${
               SEVERITY_STYLE[gap.severity ?? ''] ?? SEVERITY_STYLE.LOW
@@ -157,10 +157,10 @@ function GapRow({
             </span>
           )}
         </td>
-        <td className="px-3 py-1.5 text-slate-400">
+        <td className="px-3 py-1.5 text-ink-400">
           {gap.affectedCount > 0 ? `${gap.affectedCount} bidder(s) missed it` : ''}
         </td>
-        <td className="px-3 py-1.5 text-right text-slate-500" title={gap.exposureBasis ?? ''}>
+        <td className="px-3 py-1.5 text-right text-ink-500" title={gap.exposureBasis ?? ''}>
           {gap.exposureAmount === null ? 'TBC' : money(gap.exposureAmount)}
         </td>
         <td className="px-3 py-1.5 text-right">
@@ -173,7 +173,7 @@ function GapRow({
           <button
             onClick={() => setOpen((current) => !current)}
             className={`text-xs underline ${
-              gap.assignedType ? 'text-slate-600' : 'text-amber-700 font-medium'
+              gap.assignedType ? 'text-ink-600' : 'text-amber-700 font-medium'
             }`}
           >
             {gap.assignedType
@@ -184,7 +184,7 @@ function GapRow({
       </tr>
 
       {open && (
-        <tr className="border-t border-slate-100 bg-white text-xs">
+        <tr className="border-t border-ink-100 bg-white text-xs">
           <td />
           <td colSpan={5 + columns} className="px-3 py-2 pl-8">
             <div className="flex flex-wrap items-center gap-2">
@@ -195,8 +195,8 @@ function GapRow({
                   title={option.hint}
                   className={`rounded-md border px-2 py-1 text-xs ${
                     type === option.value
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-300 text-slate-600'
+                      ? 'border-ink-900 bg-ink-900 text-white'
+                      : 'border-ink-300 text-ink-600'
                   }`}
                 >
                   {option.label}
@@ -208,7 +208,7 @@ function GapRow({
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                   placeholder="Amount"
-                  className="w-28 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-slate-900"
+                  className="w-28 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-900"
                 />
               )}
 
@@ -216,7 +216,7 @@ function GapRow({
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 placeholder="Why — this is the part that has to survive a question"
-                className="min-w-[16rem] flex-1 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-slate-900"
+                className="min-w-[16rem] flex-1 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-900"
               />
 
               <button
@@ -234,7 +234,7 @@ function GapRow({
                   setBusy(false);
                   setOpen(false);
                 }}
-                className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
+                className="rounded-md bg-ink-900 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
               >
                 {busy ? '…' : 'Assign'}
               </button>
@@ -248,7 +248,7 @@ function GapRow({
                     setBusy(false);
                     setOpen(false);
                   }}
-                  className="text-xs text-slate-400 underline"
+                  className="text-xs text-ink-400 underline"
                 >
                   clear
                 </button>
@@ -256,7 +256,7 @@ function GapRow({
             </div>
 
             {gap.detectedByRule && (
-              <p className="mt-1.5 text-[11px] text-slate-400">Found by: {gap.detectedByRule}</p>
+              <p className="mt-1.5 text-[11px] text-ink-400">Found by: {gap.detectedByRule}</p>
             )}
           </td>
         </tr>
@@ -277,17 +277,50 @@ function GapRow({
  * screen, because the decision "nobody carried firestopping, so hold $12k" is
  * part of arriving at the number, not a footnote to it. Every disposition needs
  * a reason, and the reason is what the report is for.
+ *
+ * TWO VIEWS, ONE STEP.
+ *
+ * Merging levelling into buyout was right about the data and wrong about the
+ * screen. They are one dataset answering two different questions, and only one
+ * of them can have the top of the page:
+ *
+ *   Buyout   — what does this job cost, and what is nobody carrying?
+ *              The money grid leads; levelling is detail you open.
+ *   Leveling — which sub, and why?
+ *              The comparisons lead, opened by default, and the money grid
+ *              gets out of the way entirely.
+ *
+ * Making levelling a thing you scroll past a spreadsheet to reach meant the
+ * comparison — the actual work of a bid day — was never the thing on screen.
+ * A toggle fixes that without putting a fifth step back in the chain, which is
+ * what was wrong with the arrangement before them being merged.
  */
+export type BuyoutView = 'buyout' | 'leveling';
+
 export function BuyoutLog({
   projectId,
   onError,
+  view = 'buyout',
+  onViewChange,
 }: {
   projectId: string;
   onError: (message: string | null) => void;
+  /** Which question this screen is answering right now. See the note above. */
+  view?: BuyoutView;
+  onViewChange?: (next: BuyoutView) => void;
 }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  /**
+   * Levelling opens everything by default, so this tracks what you have shut
+   * rather than what you have opened. Comparing subs means reading the
+   * comparisons; making you click each package first is making you ask for the
+   * page you already navigated to.
+   */
+  const [collapsedLeveling, setCollapsedLeveling] = useState<Set<string>>(new Set());
+
+  const isLeveling = view === 'leveling';
 
   const load = useCallback(async () => {
     const data = await apiGet<{ rows: Row[]; totals: Totals | null }>(
@@ -314,13 +347,26 @@ export function BuyoutLog({
     }
   };
 
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    if (isLeveling) {
+      setCollapsedLeveling((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      return;
+    }
     setExpanded((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
+
+  const isOpen = (packageId: string) =>
+    isLeveling ? !collapsedLeveling.has(packageId) : expanded.has(packageId);
   /**
    * The buyout log as a spreadsheet.
    *
@@ -393,21 +439,51 @@ export function BuyoutLog({
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-slate-900">Buyout log</h2>
-          <p className="text-xs text-slate-500">
-            Variance is measured on what is carried, not what was quoted. Expand a package to
-            dispose of the scope nobody priced.
+          <h2 className="text-sm font-medium text-ink-900">
+            {isLeveling ? 'Bid leveling' : 'Buyout log'}
+          </h2>
+          <p className="text-xs text-ink-500">
+            {isLeveling
+              ? 'Every package with bids, sub by sub. The comparison says which is lowest; the sheet under it says where the difference comes from.'
+              : 'Variance is measured on what is carried, not what was quoted. Expand a package to dispose of the scope nobody priced.'}
           </p>
         </div>
-        <a
-          href={`/api/projects/${projectId}/risk-log.xlsx`}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
-        >
-          Export risk log
-        </a>
+
+        <div className="flex items-center gap-2">
+          {/* Same data, two questions. Buyout asks what the job costs;
+              levelling asks which sub and why. Whichever you picked is in
+              the URL, so a link lands where you meant it to. */}
+          {onViewChange && (
+            <div className="flex rounded-md border border-ink-300 p-0.5">
+              {(
+                [
+                  ['buyout', 'Buyout'],
+                  ['leveling', 'Leveling'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => onViewChange(value)}
+                  aria-pressed={view === value}
+                  className={`rounded px-2.5 py-1 text-xs font-medium transition ${
+                    view === value ? 'bg-ink-900 text-white' : 'text-ink-600 hover:bg-ink-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          <a
+            href={`/api/projects/${projectId}/risk-log.xlsx`}
+            className="rounded-md border border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700"
+          >
+            Export risk log
+          </a>
+        </div>
       </div>
 
-      {undecided > 0 && (
+      {!isLeveling && undecided > 0 && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {undecided} scope gap{undecided === 1 ? '' : 's'} nobody has decided about. Until each one
           is an allowance, a contingency, or accepted in writing, the total below is optimistic.
@@ -417,6 +493,7 @@ export function BuyoutLog({
       {/* The grid shows display names (budget) while the whitelist is keyed on
           database columns (budget_amount). The command has to speak the second
           language or the server filters every field away as not editable. */}
+      {!isLeveling && (
       <TableCommand
         table="work_package"
         rows={rows.map((row) => ({
@@ -444,15 +521,18 @@ export function BuyoutLog({
         onError={onError}
         placeholder='Tell it what to change — "carry 5% contingency on every package with open gaps"'
       />
+      )}
 
-      <Grid
-        columns={columns}
-        rows={gridRows}
-        onCommit={commitPackage}
-        emptyMessage="No packages yet. Put some scope into a package on the Scope step."
-      />
+      {!isLeveling && (
+        <Grid
+          columns={columns}
+          rows={gridRows}
+          onCommit={commitPackage}
+          emptyMessage="No packages yet. Put some scope into a package on the Scope step."
+        />
+      )}
 
-      {totals && rows.length > 0 && (
+      {!isLeveling && totals && rows.length > 0 && (
         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 rounded-xl border border-ink-200 bg-white px-4 py-2.5 text-xs">
           <span className="mr-auto font-semibold text-ink-900">Project total</span>
           <span className="text-ink-500">budget <b className="text-ink-900">{money(totals.budget)}</b></span>
@@ -465,7 +545,7 @@ export function BuyoutLog({
         </div>
       )}
 
-      {totals && totals.openExposure > 0 && (
+      {!isLeveling && totals && totals.openExposure > 0 && (
         <p className="rounded-lg border border-flag-100 bg-flag-50 px-3 py-2 text-xs text-flag-700">
           {money(totals.openExposure)} of exposure still sits in undecided gaps and is NOT in the
           carried total above.
@@ -484,8 +564,15 @@ export function BuyoutLog({
           Gaps stay OUTSIDE the grid rather than becoming rows in it: a gap is
           not a package, and giving it a row in the same cell model would break
           every range selection and every formula that counts packages. */}
+      {isLeveling && rows.every((row) => row.bidderCount === 0) && (
+        <p className="rounded-xl border border-ink-200 bg-white px-4 py-6 text-center text-sm text-ink-500">
+          Nothing to level yet — no package has a bid against it. Drop bids, or enter one by hand,
+          on the Bids step.
+        </p>
+      )}
+
       <div className="space-y-2">
-        {rows.map((row) => (
+        {(isLeveling ? rows.filter((row) => row.bidderCount > 0) : rows).map((row) => (
             <div key={row.packageId} className="rounded-xl border border-ink-200 bg-white">
               <button
                 onClick={() => toggle(row.packageId)}
@@ -518,11 +605,11 @@ export function BuyoutLog({
                   )}
                 </span>
                 <span className="text-xs text-ink-400">
-                  {expanded.has(row.packageId) ? 'hide' : 'open'}
+                  {isOpen(row.packageId) ? 'hide' : 'open'}
                 </span>
               </button>
 
-              {expanded.has(row.packageId) && (
+              {isOpen(row.packageId) && (
                 <div className="space-y-4 border-t border-ink-100 p-4">
                   {row.bidderCount > 0 ? (
                     <>
@@ -539,7 +626,7 @@ export function BuyoutLog({
                     </p>
                   )}
 
-                  {row.gaps.length > 0 && (
+                  {!isLeveling && row.gaps.length > 0 && (
                     <div>
                       <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-ink-400">
                         Scope gaps · {row.gaps.length}
@@ -559,9 +646,10 @@ export function BuyoutLog({
           ))}
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-ink-400">
         A leading bidder is advisory. Nothing is awarded until an estimator selects at H6 with a
         written rationale — and this system has no way to tell anyone they won.
+        {isLeveling && ' Awarding here updates the buyout log; it is the same record.'}
       </p>
     </section>
   );

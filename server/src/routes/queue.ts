@@ -176,6 +176,97 @@ queueRouter.post('/jobs/:jobId/cancel', requireRole('EST', 'BC', 'ADMIN'), async
 });
 
 /**
+ * Runs a job again.
+ *
+ * A failed or cancelled job is a dead end otherwise: the work is not done, the
+ * payload that would do it is sitting right there, and the only way forward is
+ * to go find whatever screen originally started it and remember which options
+ * were used. That is not a recovery path, it is a scavenger hunt.
+ *
+ * A NEW job is queued rather than the old one being reset. Two reasons, and
+ * both matter:
+ *
+ *   - `attempts` on the original row is the record of how many times this was
+ *     tried. Zeroing it to get another go erases the thing you would most want
+ *     to know when it fails a fourth time.
+ *   - The failed job keeps its `last_error`. Re-running in place would
+ *     overwrite the only evidence of what went wrong.
+ *
+ * The retry carries a fresh agent_run, so its output is its own and cannot be
+ * confused with the drafts of the run that failed. It goes in at the top of the
+ * queue, because somebody watching a failure and clicking retry is waiting.
+ */
+queueRouter.post('/jobs/:jobId/retry', requireRole('EST', 'BC', 'ADMIN'), async (req, res) => {
+  const jobId = req.params.jobId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: job } = await db
+    .from('job')
+    .select('id, job_type, payload, status, cancelled_at, agent_run_id, priority')
+    .eq('id', jobId)
+    .maybeSingle();
+
+  if (!job) {
+    res.status(404).json({ error: 'No such job' });
+    return;
+  }
+
+  const finished = ['DONE', 'FAILED', 'DEAD_LETTER'].includes(String(job.status));
+  if (!finished && !job.cancelled_at) {
+    res.status(409).json({
+      error: 'That job has not finished. Cancel it first if you want to start over.',
+    });
+    return;
+  }
+
+  const { data: waiting } = await db
+    .from('job')
+    .select('priority')
+    .eq('status', 'QUEUED')
+    .is('cancelled_at', null);
+
+  const top = Math.max(0, ...(waiting ?? []).map((row) => Number(row.priority ?? 0))) + 1;
+
+  const { data: created, error } = await db
+    .from('job')
+    .insert({
+      tenant_id: auth.tenantId,
+      job_type: job.job_type,
+      payload: job.payload ?? {},
+      priority: top,
+    })
+    .select('id, job_type, priority')
+    .single();
+
+  if (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+
+  await db.from('audit_event').insert({
+    tenant_id: auth.tenantId,
+    actor_id: auth.userId,
+    action: 'RETRY_JOB',
+    table_name: 'job',
+    record_id: created.id,
+    before: { retried_job_id: jobId, previous_status: job.status },
+    after: { job_type: created.job_type, priority: created.priority },
+  });
+
+  res.json({
+    id: created.id,
+    priority: created.priority,
+    note: 'Queued again at the front. The failed run is kept, with its error.',
+  });
+});
+
+/**
  * Moves a job up or down the queue.
  *
  * Priority rather than position, so a bump is not undone by whatever gets

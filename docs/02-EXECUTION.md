@@ -509,7 +509,7 @@ pattern that should come out of the knowledge base.
 
 # Where we stand
 
-**As of 2026-08-31 · roughly 85% of a presentable MVP · last push `020b6a1`.**
+**As of 2026-08-31 · roughly 87% of a presentable MVP.**
 
 Read this and the list below before anything else. `npm run resume` points here.
 
@@ -536,6 +536,14 @@ Everything else on the open list is a day's work each.
 | **P14** | No longer parked. API, screen and QA are done; it is waiting on data |
 | **Scale** | 22 migrations · 24 route files · 11 agents · 32 screens and components · 25 template divisions |
 
+## One grey, not two
+
+The client was 394 `slate-*` references against 496 `ink-*` — half the app in
+Tailwind's default cool grey, half in the warm grey this product actually chose
+in `index.css`. Nobody can name that when they see it and everybody feels it; it
+is the difference between a product and an assembly of parts. All 394 are now
+`ink-*`. **If a new screen reaches for `slate-`, that is the regression.**
+
 ## The verification bar
 
 Four commands. All four must be clean before a push, and they are the only
@@ -545,7 +553,7 @@ claim this project makes about itself that is worth anything.
 npx tsc -b        TS = 0
 npm run build     client + server clean; check-bundle finds no server secret
 npm run verify    3 suites — RLS, agent runtime, cross-tenant isolation
-npm run qa        100 feature checks against a throwaway project
+npm run qa        103 feature checks against a throwaway project
 ```
 
 `verify` proves the RULES hold. `qa` proves the FEATURES do. They fail
@@ -584,6 +592,46 @@ read when picking the build back up, and `npm run resume` points at it.
 | **L5** | Formulas are per-cell and browser-local | A formula is lost on reload and cannot reference another package's total. Fine for entry, not for a model |
 | **L7** | Rate limiting, and PDF robustness on malformed files | Carried from P20 |
 | **L15** | Drafted **context** is still accepted from a banner, not in the table | Exactly the complaint that produced the in-table scope review. Context lines are read one scope item at a time in a side panel, and there is no way to see all of a run's proposals at once |
+| **L16** | Hindsight needs one real closed job through it end to end | Every piece is built and tested against seeded data. It has never seen a real change-order log, and that is the only thing that calibrates `gap_pattern.times_confirmed` |
+
+### Done 2026-08-31 · second pass
+
+- **Buyout and levelling: one step, two views.** Merging them was right about
+  the data and wrong about the screen. They are one dataset answering two
+  questions and only one can have the top of the page — *what does this job
+  cost* versus *which sub, and why*. A toggle switches between them and the
+  choice is in the URL (`?step=buyout&view=leveling`), so a link lands where it
+  meant to and a reload does not put you back on the money grid mid-bid-day. In
+  levelling, every package with bids opens by default and the money grid is gone
+  entirely. **This is deliberately not a fifth chain step** — the step count was
+  the thing wrong with the old arrangement.
+- **The running-work panel can be put away, and acted on.** It covered the
+  corner of every screen with no way to dismiss it and nothing to do with it.
+  Now: a `hide` control that collapses it to one pill (remembered per browser,
+  still pulsing so hiding never means losing track of money being spent), and
+  inline cancel, move-to-front and run-again. Each active run carries the job
+  behind it, because all three are operations on the JOB, not the run.
+- **Requeue** (`POST /jobs/:jobId/retry`), and a `run again` control on the
+  Activity page. A failed job was a dead end: the payload that would do the work
+  was sitting right there, and the only way forward was to find whichever screen
+  started it. It queues a NEW job rather than resetting the old one, so
+  `attempts` stays honest and `last_error` survives — the two things you would
+  most want on a fourth failure.
+- **Hindsight rebuilt as the flow it actually is.** It was half a screen whose
+  empty state pointed at an Archaeology page that is not in the navigation, so
+  the only way in was through a door taken off the building. It is now four
+  numbered steps — name the job, link the project holding its bid set, drop the
+  change-order log, run the match — ending in the two answers it exists to give:
+  **what the scope of work includes**, division by division, and **what the
+  bidders missed**, with the gaps that came back as change orders called out.
+  `/archaeology` and its page are deleted; the router file keeps the endpoints.
+- **`past_project.project_id` is editable.** That link is the whole backtest —
+  without it there is no baseline to have missed anything against — and setting
+  it is an ordinary human edit, not a gate crossing.
+- **ChainNav** lost two branches that could not be taken and a ternary whose arms
+  were identical, and the active step's hint got real contrast: `ink-400` on
+  `ink-900` was barely legible, and the hint is the half that says what to do next.
+- **QA 100 → 103.**
 
 ### Done 2026-08-31
 

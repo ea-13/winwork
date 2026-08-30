@@ -54,6 +54,18 @@ export async function apiUpload<T>(path: string, files: File[]): Promise<T> {
   );
 }
 
+/** One file, under the field name `file` — what multer's `single()` expects.
+ *  Separate from apiUpload because the two field names are not interchangeable
+ *  and a mismatch fails as "No file was sent", which reads like a browser bug. */
+export async function apiUploadOne<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append('file', file);
+
+  return unwrap<T>(
+    await fetch(`/api${path}`, { method: 'POST', headers: await authHeader(), body: form }),
+  );
+}
+
 /** Opens the SSE stream with an Authorization header, which EventSource cannot
  *  send — the alternative is a token in the query string, and tokens in URLs
  *  end up in logs and referrers. */

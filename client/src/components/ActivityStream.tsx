@@ -5,8 +5,8 @@ import { openEventStream } from '../lib/api';
 type Props = { runId: string };
 
 const TONE: Record<string, string> = {
-  INFO: 'text-slate-600',
-  RESULT: 'text-slate-900 font-medium',
+  INFO: 'text-ink-600',
+  RESULT: 'text-ink-900 font-medium',
   WARNING: 'text-amber-700',
   ERROR: 'text-red-700',
 };
@@ -91,28 +91,28 @@ export function ActivityStream({ runId }: Props) {
   }, [events.length, finished]);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white">
-      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
+    <section className="rounded-lg border border-ink-200 bg-white">
+      <header className="flex items-center justify-between border-b border-ink-200 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <span
             className={`inline-block h-2 w-2 rounded-full ${
-              finished ? 'bg-slate-300' : 'animate-pulse bg-emerald-500'
+              finished ? 'bg-ink-300' : 'animate-pulse bg-emerald-500'
             }`}
           />
-          <h2 className="text-sm font-medium text-slate-900">Activity</h2>
+          <h2 className="text-sm font-medium text-ink-900">Activity</h2>
         </div>
-        <span className="font-mono text-xs text-slate-500">
+        <span className="font-mono text-xs text-ink-500">
           {elapsed(startedAt.current, stoppedAt ?? now)}
         </span>
       </header>
 
       <ol className="max-h-96 overflow-y-auto px-4 py-3 font-mono text-[13px] leading-relaxed">
         {events.length === 0 && !error && (
-          <li className="text-slate-400">waiting for the worker to pick this up…</li>
+          <li className="text-ink-400">waiting for the worker to pick this up…</li>
         )}
 
         {events.map((event) => (
-          <li key={event.seq} className={`flex gap-2 ${TONE[event.eventType] ?? 'text-slate-600'}`}>
+          <li key={event.seq} className={`flex gap-2 ${TONE[event.eventType] ?? 'text-ink-600'}`}>
             <span aria-hidden className="select-none">
               {event.eventType === 'WARNING' || event.eventType === 'ERROR' ? '!' : '>'}
             </span>
@@ -122,7 +122,7 @@ export function ActivityStream({ runId }: Props) {
 
         {error && <li className="text-red-700">stream error: {error}</li>}
         {finished && (
-          <li className="mt-2 text-slate-400">
+          <li className="mt-2 text-ink-400">
             — run {finished.toLowerCase()} in {elapsed(startedAt.current, stoppedAt ?? now)} —
           </li>
         )}

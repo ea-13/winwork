@@ -24,33 +24,33 @@ export function Login() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="text-xl font-semibold tracking-tight text-slate-900">WinProjects</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <h1 className="text-xl font-semibold tracking-tight text-ink-900">WinProjects</h1>
+      <p className="mt-1 text-sm text-ink-500">
         Your low bidder wasn&rsquo;t your low bidder.
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">Email</span>
+          <span className="text-sm font-medium text-ink-700">Email</span>
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="username"
             required
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+            className="mt-1 w-full rounded-md border border-ink-300 px-3 py-2 text-sm outline-none focus:border-ink-900"
           />
         </label>
 
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">Password</span>
+          <span className="text-sm font-medium text-ink-700">Password</span>
           <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
             required
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+            className="mt-1 w-full rounded-md border border-ink-300 px-3 py-2 text-sm outline-none focus:border-ink-900"
           />
         </label>
 
@@ -59,7 +59,7 @@ export function Login() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="w-full rounded-md bg-ink-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {busy ? 'Signing in…' : 'Sign in'}
         </button>

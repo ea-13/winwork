@@ -214,7 +214,7 @@ export function BidTab({
 
   if (bidders.length === 0) {
     return (
-      <p className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-400">
+      <p className="rounded-lg border border-ink-200 bg-white px-4 py-6 text-sm text-ink-400">
         No bids on this package yet. Upload sub bids, extract them, then recompute on the Leveling
         step — the tab sheet is built from mapped quote lines.
       </p>
@@ -225,8 +225,8 @@ export function BidTab({
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-medium text-slate-900">Bid tab</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-medium text-ink-900">Bid tab</h2>
+          <p className="text-xs text-ink-500">
             What each sub carried, scope item by scope item. Click a number to type your own over
             it; the rolled-up figure is kept underneath either way.
           </p>
@@ -234,17 +234,17 @@ export function BidTab({
         <button
           onClick={() => void openDetail()}
           disabled={busy || selected.size === 0}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-40"
+          className="rounded-md border border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700 disabled:opacity-40"
           title="Open the sub detail and full scope wording for everything selected"
         >
           Open {selected.size || ''} selected
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-ink-200 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+            <tr className="border-b border-ink-200 text-left text-xs text-ink-500">
               <th className="w-8 px-2 py-2" />
               <th className="px-3 py-2 font-medium uppercase tracking-wide">Scope item</th>
               <th className="px-3 py-2 text-right font-medium uppercase tracking-wide">Qty</th>
@@ -253,7 +253,7 @@ export function BidTab({
                   <select
                     value={column.quoteId}
                     onChange={(event) => swapColumn(index, event.target.value)}
-                    className="w-full max-w-[11rem] truncate rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-semibold text-slate-900 hover:border-slate-300 focus:border-slate-900 focus:outline-none"
+                    className="w-full max-w-[11rem] truncate rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-semibold text-ink-900 hover:border-ink-300 focus:border-ink-900 focus:outline-none"
                   >
                     {bidders.map((bidder) => (
                       <option key={bidder.quoteId} value={bidder.quoteId}>
@@ -261,7 +261,7 @@ export function BidTab({
                       </option>
                     ))}
                   </select>
-                  <span className="mt-0.5 block px-1 text-[11px] font-normal normal-case text-slate-400">
+                  <span className="mt-0.5 block px-1 text-[11px] font-normal normal-case text-ink-400">
                     {column.status === 'EXTRACTED' ? (
                       <>
                         {column.advisoryRank > 0 ? `#${column.advisoryRank} adjusted` : 'unranked'}{' '}
@@ -282,8 +282,8 @@ export function BidTab({
           </thead>
 
           {groups.map(([code, items]) => (
-            <tbody key={code} className="border-b border-slate-200 last:border-0">
-              <tr className="bg-slate-50 text-xs">
+            <tbody key={code} className="border-b border-ink-200 last:border-0">
+              <tr className="bg-ink-50 text-xs">
                 <td className="px-2 py-1.5">
                   <input
                     type="checkbox"
@@ -291,9 +291,9 @@ export function BidTab({
                     onChange={() => toggleGroup(items)}
                   />
                 </td>
-                <td className="px-3 py-1.5 font-semibold text-slate-900" colSpan={2}>
+                <td className="px-3 py-1.5 font-semibold text-ink-900" colSpan={2}>
                   <span className="font-mono">{code}</span>
-                  <span className="ml-2 font-normal text-slate-400">
+                  <span className="ml-2 font-normal text-ink-400">
                     {items.length} item{items.length === 1 ? '' : 's'}
                   </span>
                 </td>
@@ -304,7 +304,7 @@ export function BidTab({
                   return (
                     <td
                       key={column.quoteId}
-                      className="px-3 py-1.5 text-right font-medium text-slate-600"
+                      className="px-3 py-1.5 text-right font-medium text-ink-600"
                     >
                       {values.length === 0
                         ? '—'
@@ -316,7 +316,7 @@ export function BidTab({
 
               {items.map((item) => (
                 <Fragment key={item.id}>
-                  <tr className="border-t border-slate-100">
+                  <tr className="border-t border-ink-100">
                     <td className="px-2 py-1.5">
                       <input
                         type="checkbox"
@@ -325,8 +325,8 @@ export function BidTab({
                       />
                     </td>
                     <td className="px-3 py-1.5">
-                      <span className="font-mono text-[11px] text-slate-400">{item.scope_id}</span>
-                      <span className="ml-2 text-slate-800">{item.title}</span>
+                      <span className="font-mono text-[11px] text-ink-400">{item.scope_id}</span>
+                      <span className="ml-2 text-ink-800">{item.title}</span>
                       {!item.is_locked && (
                         <span
                           className="ml-1.5 text-[11px] text-amber-600"
@@ -336,7 +336,7 @@ export function BidTab({
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs text-ink-500">
                       {item.quantity === null ? '—' : `${item.quantity} ${item.unit ?? ''}`}
                     </td>
 
@@ -358,7 +358,7 @@ export function BidTab({
                             setNoteFor(key);
                             setNoteDraft(cell?.note ?? '');
                           }}
-                          className="cursor-text px-3 py-1.5 text-right hover:bg-slate-50"
+                          className="cursor-text px-3 py-1.5 text-right hover:bg-ink-50"
                         >
                           {active ? (
                             <input
@@ -372,14 +372,14 @@ export function BidTab({
                                 if (event.key === 'Enter') void saveOverride();
                                 if (event.key === 'Escape') setEditing(null);
                               }}
-                              className="w-24 rounded border border-slate-900 px-1 text-right outline-none"
+                              className="w-24 rounded border border-ink-900 px-1 text-right outline-none"
                             />
                           ) : (
                             <span className="inline-flex items-baseline justify-end gap-1">
                               {value === null ? (
                                 <span
                                   className={
-                                    cell?.isExcluded ? 'text-xs text-amber-600' : 'text-slate-300'
+                                    cell?.isExcluded ? 'text-xs text-amber-600' : 'text-ink-300'
                                   }
                                   title={
                                     cell?.isExcluded
@@ -391,7 +391,7 @@ export function BidTab({
                                 </span>
                               ) : (
                                 <span
-                                  className={overridden ? 'font-medium text-sky-700' : 'text-slate-700'}
+                                  className={overridden ? 'font-medium text-sky-700' : 'text-ink-700'}
                                   title={
                                     overridden
                                       ? `Your number. Rolled up: ${money(cell?.rolledTotal ?? null)}`
@@ -408,7 +408,7 @@ export function BidTab({
                                   setNoteDraft(cell?.note ?? '');
                                 }}
                                 className={`text-[11px] ${
-                                  cell?.note ? 'text-sky-600' : 'text-slate-200 hover:text-slate-500'
+                                  cell?.note ? 'text-sky-600' : 'text-ink-200 hover:text-ink-500'
                                 }`}
                                 title={cell?.note ?? 'Add a note'}
                               >
@@ -423,11 +423,11 @@ export function BidTab({
 
                   {noteFor?.startsWith(`${item.id}|`) &&
                     columns.some((column) => noteFor === `${item.id}|${column.quoteId}`) && (
-                      <tr className="border-t border-slate-100 bg-sky-50/50">
+                      <tr className="border-t border-ink-100 bg-sky-50/50">
                         <td />
                         <td colSpan={2 + columns.length} className="px-3 py-2">
                           <div className="flex items-center gap-2">
-                            <span className="shrink-0 text-[11px] text-slate-500">
+                            <span className="shrink-0 text-[11px] text-ink-500">
                               {bidders.find((bidder) => bidder.quoteId === noteFor.split('|')[1])
                                 ?.name ?? 'Bidder'}{' '}
                               · {item.title}
@@ -441,18 +441,18 @@ export function BidTab({
                                 if (event.key === 'Escape') setNoteFor(null);
                               }}
                               placeholder="20ga assumed, not 18. Said they would revise Friday."
-                              className="flex-1 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-slate-900"
+                              className="flex-1 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-900"
                             />
                             <button
                               onClick={() => void saveNote()}
                               disabled={busy}
-                              className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+                              className="rounded-md bg-ink-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
                             >
                               Save
                             </button>
                             <button
                               onClick={() => setNoteFor(null)}
-                              className="text-xs text-slate-400"
+                              className="text-xs text-ink-400"
                             >
                               cancel
                             </button>
@@ -468,7 +468,7 @@ export function BidTab({
           {scopeItems.length === 0 && (
             <tbody>
               <tr>
-                <td colSpan={3 + columns.length} className="px-4 py-6 text-sm text-slate-400">
+                <td colSpan={3 + columns.length} className="px-4 py-6 text-sm text-ink-400">
                   This package has no scope attached. Add scope items to it on the package Scope
                   step — a quote can only be levelled against a baseline.
                 </td>
@@ -478,7 +478,7 @@ export function BidTab({
 
           {scopeItems.length > 0 && (
             <tfoot>
-              <tr className="border-t-2 border-slate-300 bg-slate-50 text-xs font-semibold">
+              <tr className="border-t-2 border-ink-300 bg-ink-50 text-xs font-semibold">
                 <td />
                 <td className="px-3 py-2" colSpan={2}>
                   Tabbed total
@@ -489,7 +489,7 @@ export function BidTab({
                   </td>
                 ))}
               </tr>
-              <tr className="bg-slate-50 text-xs text-slate-500">
+              <tr className="bg-ink-50 text-xs text-ink-500">
                 <td />
                 <td className="px-3 pb-2" colSpan={2}>
                   Quoted total
@@ -505,7 +505,7 @@ export function BidTab({
         </table>
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-ink-400">
         A tabbed total below the quoted total means lines are still unmapped, not that the sub is
         cheaper than they said. Normalise the quote before reading the difference as real.
       </p>
@@ -535,41 +535,41 @@ function DetailView({ detail, onClose }: { detail: Detail; onClose: () => void }
     );
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/20" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-ink-900/20" onClick={onClose}>
       <div
         onClick={(event) => event.stopPropagation()}
-        className="h-full w-full max-w-3xl overflow-y-auto border-l border-slate-300 bg-white shadow-2xl"
+        className="h-full w-full max-w-3xl overflow-y-auto border-l border-ink-300 bg-white shadow-2xl"
       >
-        <header className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3">
+        <header className="sticky top-0 flex items-center justify-between border-b border-ink-200 bg-white px-5 py-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">
+            <h3 className="text-sm font-semibold text-ink-900">
               {detail.scopeItems.length} scope item{detail.scopeItems.length === 1 ? '' : 's'} ·{' '}
               {detail.bidders.length} bidder{detail.bidders.length === 1 ? '' : 's'}
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-500">
               What each sub wrote, against what the scope actually says.
             </p>
           </div>
-          <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-900">
+          <button onClick={onClose} className="text-xs text-ink-400 hover:text-ink-900">
             close
           </button>
         </header>
 
         <div className="space-y-5 px-5 py-4">
           {detail.scopeItems.map((item) => (
-            <article key={item.id} className="rounded-lg border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="font-mono text-[11px] text-slate-400">
+            <article key={item.id} className="rounded-lg border border-ink-200">
+              <div className="border-b border-ink-200 bg-ink-50 px-3 py-2">
+                <p className="font-mono text-[11px] text-ink-400">
                   {item.scope_id}
                   {item.csi_section ? ` · §${item.csi_section}` : ''}
                 </p>
-                <h4 className="text-sm font-medium text-slate-900">{item.title}</h4>
+                <h4 className="text-sm font-medium text-ink-900">{item.title}</h4>
                 {item.description && (
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-slate-600">
+                  <p className="mt-1 whitespace-pre-wrap text-xs text-ink-600">
                     {item.description}
                   </p>
                 )}
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-ink-500">
                   {item.quantity === null
                     ? 'Quantity not stated in the documents'
                     : `${item.quantity} ${item.unit ?? ''}${
@@ -578,17 +578,17 @@ function DetailView({ detail, onClose }: { detail: Detail; onClose: () => void }
                 </p>
               </div>
 
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-ink-100">
                 {detail.bidders.map((bidder) => {
                   const lines = lineFor(item.id, bidder.quoteId);
                   const exclusions = exclusionFor(item.id, bidder.quoteId);
 
                   return (
                     <div key={bidder.quoteId} className="px-3 py-2">
-                      <p className="text-xs font-medium text-slate-800">{bidder.name}</p>
+                      <p className="text-xs font-medium text-ink-800">{bidder.name}</p>
 
                       {lines.length === 0 && exclusions.length === 0 && (
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-ink-400">
                           Nothing mapped to this scope item.
                         </p>
                       )}
@@ -598,7 +598,7 @@ function DetailView({ detail, onClose }: { detail: Detail; onClose: () => void }
                           key={String(line.id)}
                           className="mt-1 flex items-baseline justify-between gap-3 text-xs"
                         >
-                          <span className="text-slate-600">
+                          <span className="text-ink-600">
                             {String(line.description ?? line.original_text ?? 'Unlabelled line')}
                             {line.is_lumped ? (
                               <span className="ml-1 text-amber-600" title="Lumped with other scope">
@@ -606,7 +606,7 @@ function DetailView({ detail, onClose }: { detail: Detail; onClose: () => void }
                               </span>
                             ) : null}
                           </span>
-                          <span className="shrink-0 tabular-nums text-slate-800">
+                          <span className="shrink-0 tabular-nums text-ink-800">
                             {money(typeof line.line_total === 'number' ? line.line_total : null)}
                           </span>
                         </div>

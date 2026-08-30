@@ -153,7 +153,7 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg hover:bg-slate-800"
+        className="fixed bottom-5 right-5 z-40 rounded-full bg-ink-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg hover:bg-ink-800"
       >
         Ask an expert
       </button>
@@ -161,10 +161,10 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
   }
 
   return (
-    <aside className="fixed bottom-0 right-0 z-40 flex h-[70vh] w-[26rem] max-w-[95vw] flex-col rounded-tl-lg border-l border-t border-slate-300 bg-white shadow-2xl">
-      <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+    <aside className="fixed bottom-0 right-0 z-40 flex h-[70vh] w-[26rem] max-w-[95vw] flex-col rounded-tl-lg border-l border-t border-ink-300 bg-white shadow-2xl">
+      <header className="flex items-center justify-between border-b border-ink-200 px-3 py-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-900">Ask an expert</span>
+          <span className="text-xs font-semibold text-ink-900">Ask an expert</span>
           <div className="flex rounded border border-ink-300 text-[11px]">
             {([
               ['PROJECT', 'project', 'Reads this project and can run the agents'],
@@ -184,19 +184,19 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+        <div className="flex items-center gap-2 text-[11px] text-ink-400">
           {messages.length > 0 && (
             <button
               onClick={() => {
                 setThreadId(null);
                 setMessages([]);
               }}
-              className="hover:text-slate-700"
+              className="hover:text-ink-700"
             >
               new
             </button>
           )}
-          <button onClick={() => setOpen(false)} className="hover:text-slate-700">
+          <button onClick={() => setOpen(false)} className="hover:text-ink-700">
             close
           </button>
         </div>
@@ -284,7 +284,7 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
 
       <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {messages.length === 0 && (
-          <p className="pt-6 text-center text-xs text-slate-400">
+          <p className="pt-6 text-center text-xs text-ink-400">
             {mode === 'PROJECT'
               ? 'Ask about this project — what is open, why a bid is cheaper, what to do next. It reads the real data.'
               : mode === 'EXPERT'
@@ -300,8 +300,8 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
             key={message.id}
             className={`rounded-lg px-2.5 py-1.5 text-xs ${
               message.role === 'USER'
-                ? 'ml-6 bg-slate-900 text-white'
-                : 'mr-2 bg-slate-100 text-slate-800'
+                ? 'ml-6 bg-ink-900 text-white'
+                : 'mr-2 bg-ink-100 text-ink-800'
             }`}
           >
             <p className="whitespace-pre-wrap">{message.content}</p>
@@ -313,12 +313,12 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
           </div>
         ))}
 
-        {thinking && <p className="text-xs text-slate-400">thinking…</p>}
+        {thinking && <p className="text-xs text-ink-400">thinking…</p>}
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div ref={bottom} />
       </div>
 
-      <form onSubmit={ask} className="border-t border-slate-200 p-2">
+      <form onSubmit={ask} className="border-t border-ink-200 p-2">
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
@@ -331,7 +331,7 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
               ? 'What is still open on this job?'
               : 'Who normally carries head-of-wall firestopping?'
           }
-          className="w-full resize-none rounded border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-slate-900"
+          className="w-full resize-none rounded border border-ink-300 px-2 py-1.5 text-xs outline-none focus:border-ink-900"
         />
       </form>
     </aside>

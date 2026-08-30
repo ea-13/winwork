@@ -72,17 +72,17 @@ export function Solicitation({
   return (
     <section className="space-y-5">
       <div>
-        <h2 className="text-sm font-medium text-slate-900">Bidder list</h2>
-        <p className="text-xs text-slate-500">
+        <h2 className="text-sm font-medium text-ink-900">Bidder list</h2>
+        <p className="text-xs text-ink-500">
           Ranked on trade match, prequal, EMR and bonding. Advisory — approving the list is H4.
           {divisions.length > 0 && ` Divisions in play: ${divisions.join(', ')}.`}
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-ink-200 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
               <th className="px-4 py-2 font-medium">Subcontractor</th>
               <th className="px-4 py-2 font-medium">Why</th>
               <th className="px-4 py-2 text-right font-medium">Score</th>
@@ -91,15 +91,15 @@ export function Solicitation({
           </thead>
           <tbody>
             {candidates.slice(0, 25).map((candidate) => (
-              <tr key={candidate.id} className="border-b border-slate-100 last:border-0">
+              <tr key={candidate.id} className="border-b border-ink-100 last:border-0">
                 <td className="px-4 py-2">
-                  <div className="font-medium text-slate-900">{candidate.name}</div>
+                  <div className="font-medium text-ink-900">{candidate.name}</div>
                   {candidate.contact_email && (
-                    <div className="text-xs text-slate-400">{candidate.contact_email}</div>
+                    <div className="text-xs text-ink-400">{candidate.contact_email}</div>
                   )}
                 </td>
-                <td className="px-4 py-2 text-xs text-slate-500">{candidate.reasons.join(' · ')}</td>
-                <td className="px-4 py-2 text-right font-mono text-xs text-slate-600">
+                <td className="px-4 py-2 text-xs text-ink-500">{candidate.reasons.join(' · ')}</td>
+                <td className="px-4 py-2 text-right font-mono text-xs text-ink-600">
                   {candidate.score}
                 </td>
                 <td className="px-4 py-2 text-right">
@@ -113,7 +113,7 @@ export function Solicitation({
                         })
                       }
                       disabled={busy}
-                      className="text-xs text-slate-500 underline"
+                      className="text-xs text-ink-500 underline"
                     >
                       on the list — remove
                     </button>
@@ -125,7 +125,7 @@ export function Solicitation({
                         })
                       }
                       disabled={busy}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700"
+                      className="rounded-md border border-ink-300 px-2 py-1 text-xs font-medium text-ink-700"
                     >
                       Add
                     </button>
@@ -135,7 +135,7 @@ export function Solicitation({
             ))}
             {candidates.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-sm text-slate-400">
+                <td colSpan={4} className="px-4 py-6 text-sm text-ink-400">
                   No subs carry these trades. Import a sub list, or assign trades on the
                   Subcontractors screen.
                 </td>
@@ -146,7 +146,7 @@ export function Solicitation({
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-slate-900">Solicitation</h2>
+        <h2 className="text-sm font-medium text-ink-900">Solicitation</h2>
         <button
           onClick={() =>
             void act(async () => {
@@ -154,21 +154,21 @@ export function Solicitation({
             })
           }
           disabled={busy}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
+          className="rounded-md border border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700"
         >
           {drafts.length > 0 ? 'Re-draft' : 'Draft invitation'}
         </button>
       </div>
 
       {latest ? (
-        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
-          <div className="text-sm font-medium text-slate-900">{latest.subject}</div>
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 font-mono text-xs text-slate-700">
+        <div className="space-y-2 rounded-lg border border-ink-200 bg-white p-4">
+          <div className="text-sm font-medium text-ink-900">{latest.subject}</div>
+          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-ink-50 p-3 font-mono text-xs text-ink-700">
             {latest.body}
           </pre>
 
-          <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-xs text-slate-600">
+          <div className="flex items-center justify-between rounded-md border border-ink-200 bg-ink-50 px-3 py-2">
+            <p className="text-xs text-ink-600">
               <strong>Drafted.</strong> WinProjects does not send email — copy this into your own
               system.
             </p>
@@ -178,19 +178,19 @@ export function Solicitation({
                 setCopied(latest.id);
                 setTimeout(() => setCopied(null), 2000);
               }}
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
+              className="rounded-md bg-ink-900 px-3 py-1.5 text-xs font-medium text-white"
             >
               {copied === latest.id ? 'Copied' : 'Copy'}
             </button>
           </div>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-ink-400">
             There is no send button anywhere in this product. Not disabled — absent. Nothing here can
             contact your subs.
           </p>
         </div>
       ) : (
-        <p className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-400">
+        <p className="rounded-lg border border-ink-200 bg-white px-4 py-6 text-sm text-ink-400">
           No invitation drafted yet.
         </p>
       )}

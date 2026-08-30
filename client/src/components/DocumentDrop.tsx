@@ -35,7 +35,7 @@ const KIND_STYLE: Record<string, string> = {
   ADDENDUM: 'bg-orange-100 text-orange-800',
   GEOTECH: 'bg-stone-200 text-stone-700',
   QUOTE: 'bg-emerald-100 text-emerald-800',
-  OTHER: 'bg-slate-100 text-slate-600',
+  OTHER: 'bg-ink-100 text-ink-600',
 };
 
 /** One row of the upload queue. */
@@ -47,7 +47,7 @@ function QueueRow({ state }: { state: UploadState }) {
       ? 'bg-red-500'
       : state.status === 'DONE'
         ? 'bg-emerald-500'
-        : 'bg-slate-900';
+        : 'bg-ink-900';
 
   const label =
     state.status === 'QUEUED'
@@ -65,12 +65,12 @@ function QueueRow({ state }: { state: UploadState }) {
   return (
     <div className="px-3 py-2">
       <div className="flex items-baseline justify-between gap-3 text-xs">
-        <span className="truncate text-slate-700">{state.file.name}</span>
-        <span className="shrink-0 tabular-nums text-slate-400">
+        <span className="truncate text-ink-700">{state.file.name}</span>
+        <span className="shrink-0 tabular-nums text-ink-400">
           {fileSize(state.file.size)} · {label}
         </span>
       </div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-200">
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-ink-200">
         <div
           className={`h-full transition-all duration-150 ${bar}`}
           style={{ width: `${state.status === 'QUEUED' ? 0 : Math.max(percent, 2)}%` }}
@@ -263,7 +263,7 @@ export function DocumentDrop({
         }}
         onClick={() => picker.current?.click()}
         className={`cursor-pointer rounded-lg border-2 border-dashed px-4 py-8 text-center text-sm transition ${
-          dragging ? 'border-slate-900 bg-white text-slate-900' : 'border-slate-300 text-slate-500'
+          dragging ? 'border-ink-900 bg-white text-ink-900' : 'border-ink-300 text-ink-500'
         }`}
       >
         <span className="font-medium">Drop the whole bid set here</span>
@@ -284,12 +284,12 @@ export function DocumentDrop({
       />
 
       {queue.length > 0 && (
-        <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between px-3 py-2 text-xs font-medium text-slate-600">
+        <div className="divide-y divide-ink-100 rounded-lg border border-ink-200 bg-white">
+          <div className="flex items-center justify-between px-3 py-2 text-xs font-medium text-ink-600">
             <span>
               {queue.filter((state) => state.status === 'DONE').length} of {queue.length} uploaded
             </span>
-            {uploading && <span className="text-slate-400">uploading…</span>}
+            {uploading && <span className="text-ink-400">uploading…</span>}
           </div>
           {queue.map((state) => (
             <QueueRow key={state.id} state={state} />
@@ -305,7 +305,7 @@ export function DocumentDrop({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-500">
           {selectedReadable.length > 0
             ? `${selectedReadable.length} document${selectedReadable.length === 1 ? '' : 's'} selected`
             : 'Select drawings and specs to draft scope from them.'}
@@ -313,7 +313,7 @@ export function DocumentDrop({
         <button
           onClick={() => void draftScope()}
           disabled={busy || selectedReadable.length === 0}
-          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+          className="rounded-md bg-ink-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
           title="Reads the selected documents and drafts scope items into the review queue"
         >
           Draft scope from {selectedReadable.length || ''} document
@@ -321,10 +321,10 @@ export function DocumentDrop({
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-ink-200 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500">
               <th className="w-9 px-3 py-2" />
               <th className="px-3 py-2 font-medium">File</th>
               <th className="px-3 py-2 font-medium">What it is</th>
@@ -337,7 +337,7 @@ export function DocumentDrop({
           <tbody>
             {documents.map((document) => (
               <Fragment key={document.id}>
-                <tr className="border-b border-slate-100 last:border-0">
+                <tr className="border-b border-ink-100 last:border-0">
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
@@ -351,7 +351,7 @@ export function DocumentDrop({
                       }
                     />
                   </td>
-                  <td className="px-3 py-2 text-slate-800">{document.filename}</td>
+                  <td className="px-3 py-2 text-ink-800">{document.filename}</td>
                   <td className="px-3 py-2">
                     <select
                       value={document.kind}
@@ -375,7 +375,7 @@ export function DocumentDrop({
                         void setField(document.id, 'discipline', event.target.value)
                       }
                       placeholder="—"
-                      className="w-12 rounded border border-transparent px-1 text-xs hover:border-slate-300 focus:border-slate-900 focus:outline-none"
+                      className="w-12 rounded border border-transparent px-1 text-xs hover:border-ink-300 focus:border-ink-900 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -386,7 +386,7 @@ export function DocumentDrop({
                         void setField(document.id, 'revision', event.target.value)
                       }
                       placeholder="—"
-                      className="w-14 rounded border border-transparent px-1 text-xs hover:border-slate-300 focus:border-slate-900 focus:outline-none"
+                      className="w-14 rounded border border-transparent px-1 text-xs hover:border-ink-300 focus:border-ink-900 focus:outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -414,7 +414,7 @@ export function DocumentDrop({
                       document.indexed_at ? (
                         <button
                           onClick={() => void openSheets(document)}
-                          className="text-xs text-slate-700 underline"
+                          className="text-xs text-ink-700 underline"
                         >
                           {expanded === document.id ? 'hide' : 'view'} index
                         </button>
@@ -422,45 +422,45 @@ export function DocumentDrop({
                         <button
                           onClick={() => void indexSheets(document)}
                           disabled={busy}
-                          className="rounded-md border border-slate-300 px-2 py-0.5 text-xs font-medium text-slate-700 disabled:opacity-40"
+                          className="rounded-md border border-ink-300 px-2 py-0.5 text-xs font-medium text-ink-700 disabled:opacity-40"
                           title="Reads every title block so scope can cite sheet numbers"
                         >
                           Index sheets
                         </button>
                       )
                     ) : (
-                      <span className="text-xs text-slate-300">—</span>
+                      <span className="text-xs text-ink-300">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{fileSize(document.size_bytes)}</td>
+                  <td className="px-3 py-2 text-ink-500">{fileSize(document.size_bytes)}</td>
                 </tr>
 
                 {expanded === document.id && (
-                  <tr className="border-b border-slate-100">
+                  <tr className="border-b border-ink-100">
                     <td />
                     <td colSpan={6} className="px-3 pb-3">
-                      <div className="max-h-64 overflow-auto rounded border border-slate-200">
+                      <div className="max-h-64 overflow-auto rounded border border-ink-200">
                         <table className="w-full text-xs">
                           <tbody>
                             {sheets.map((sheet) => (
-                              <tr key={sheet.id} className="border-b border-slate-100 last:border-0">
-                                <td className="w-14 px-2 py-1 text-slate-400">
+                              <tr key={sheet.id} className="border-b border-ink-100 last:border-0">
+                                <td className="w-14 px-2 py-1 text-ink-400">
                                   p.{sheet.page_number}
                                 </td>
-                                <td className="w-24 px-2 py-1 font-mono text-slate-800">
+                                <td className="w-24 px-2 py-1 font-mono text-ink-800">
                                   {sheet.sheet_number ?? '—'}
                                 </td>
-                                <td className="px-2 py-1 text-slate-600">
+                                <td className="px-2 py-1 text-ink-600">
                                   {sheet.sheet_title ?? '—'}
                                 </td>
-                                <td className="w-10 px-2 py-1 text-slate-400">
+                                <td className="w-10 px-2 py-1 text-ink-400">
                                   {sheet.discipline ?? ''}
                                 </td>
                               </tr>
                             ))}
                             {sheets.length === 0 && (
                               <tr>
-                                <td className="px-2 py-3 text-slate-400">Loading the index…</td>
+                                <td className="px-2 py-3 text-ink-400">Loading the index…</td>
                               </tr>
                             )}
                           </tbody>
@@ -474,7 +474,7 @@ export function DocumentDrop({
 
             {documents.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-sm text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-sm text-ink-400">
                   No bid documents yet.
                 </td>
               </tr>
@@ -485,7 +485,7 @@ export function DocumentDrop({
 
       {runId && <ActivityStream runId={runId} />}
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-ink-400">
         Drafted scope goes to the review queue, not straight into the project. An agent proposes;
         an estimator decides.
       </p>

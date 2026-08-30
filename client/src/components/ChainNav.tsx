@@ -14,10 +14,10 @@ export type ChainSummary = {
 
 export type ChainStep = 'documents' | 'scope' | 'bids' | 'buyout';
 
-/** Which steps live on the project, and which need a package chosen first. */
 // Bids and leveling exist at BOTH levels: a summary across packages on the
-// project, the detail inside one. Nothing is gated on choosing a package.
-const PROJECT_STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'buyout'];
+// project, the detail inside one. Nothing is gated on choosing a package, and
+// nothing is ever disabled — a step that is not ready says why underneath.
+const STEPS: ChainStep[] = ['documents', 'scope', 'bids', 'buyout'];
 
 const LABEL: Record<ChainStep, string> = {
   documents: 'Documents',
@@ -139,22 +139,17 @@ export function ChainNav({
     else navigate(`/projects/${projectId}?step=${step}`);
   };
 
-  const steps: ChainStep[] = ['documents', 'scope', 'bids', 'buyout'];
-
   return (
     <nav aria-label="Workflow" className="overflow-x-auto">
       <ol className="flex w-full items-stretch gap-1">
-        {steps.map((step, index) => {
+        {STEPS.map((step, index) => {
           const { count, hint } = detail(step);
           const isActive = step === active;
-          // Nothing is unreachable any more; kept as a constant so the styling
-          // below reads the same as it did.
-          const unreachable = false;
 
           return (
             <li key={step} className="flex items-stretch">
               {index > 0 && (
-                <span aria-hidden className="self-center px-1 text-slate-300">
+                <span aria-hidden className="self-center px-1 text-ink-300">
                   ›
                 </span>
               )}
@@ -163,10 +158,8 @@ export function ChainNav({
                 aria-current={isActive ? 'step' : undefined}
                 className={`min-w-[130px] flex-1 rounded-md border px-3 py-2 text-left transition ${
                   isActive
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : unreachable
-                      ? 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
+                    ? 'border-ink-900 bg-ink-900 text-white'
+                    : 'border-ink-200 bg-white text-ink-700 hover:border-ink-400'
                 }`}
               >
                 <span className="flex items-baseline justify-between gap-2">
@@ -174,7 +167,7 @@ export function ChainNav({
                   {count !== '' && (
                     <span
                       className={`text-xs tabular-nums ${
-                        isActive ? 'text-slate-300' : 'text-slate-400'
+                        isActive ? 'text-ink-200' : 'text-ink-400'
                       }`}
                     >
                       {count}
@@ -183,10 +176,10 @@ export function ChainNav({
                 </span>
                 <span
                   className={`mt-0.5 block text-[10px] leading-tight ${
-                    isActive ? 'text-slate-400' : 'text-slate-400'
+                    isActive ? 'text-ink-300' : 'text-ink-400'
                   }`}
                 >
-                  {unreachable ? 'pick a package' : (hint ?? ' ')}
+                  {hint ?? ' '}
                 </span>
               </button>
             </li>
@@ -195,7 +188,7 @@ export function ChainNav({
       </ol>
 
       {packageId && (
-        <p className="mt-1.5 text-xs text-slate-400">
+        <p className="mt-1.5 text-xs text-ink-400">
           Bids are per package.{' '}
           <Link to={`/projects/${projectId}?step=scope`} className="underline">
             Switch package

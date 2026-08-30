@@ -26,7 +26,7 @@ type Group = {
 };
 
 const FILL_TAG: Record<string, string> = {
-  S: 'bg-slate-100 text-slate-600',
+  S: 'bg-ink-100 text-ink-600',
   AI: 'bg-sky-100 text-sky-800',
   H: 'bg-emerald-100 text-emerald-800',
   L: 'bg-violet-100 text-violet-800',
@@ -57,7 +57,7 @@ function Accept({
           event.stopPropagation();
           setOpen(true);
         }}
-        className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white"
+        className="rounded-md bg-ink-900 px-2.5 py-1 text-xs font-medium text-white"
       >
         {label}
       </button>
@@ -71,7 +71,7 @@ function Accept({
         value={rationale}
         onChange={(event) => setRationale(event.target.value)}
         placeholder="Why are you accepting this?"
-        className="w-56 rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-slate-900"
+        className="w-56 rounded border border-ink-300 px-2 py-1 text-xs outline-none focus:border-ink-900"
       />
       <button
         disabled={busy || rationale.trim() === ''}
@@ -82,11 +82,11 @@ function Accept({
           setOpen(false);
           setRationale('');
         }}
-        className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+        className="rounded-md bg-ink-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
       >
         {busy ? '…' : 'Confirm'}
       </button>
-      <button onClick={() => setOpen(false)} className="px-1 text-xs text-slate-400">
+      <button onClick={() => setOpen(false)} className="px-1 text-xs text-ink-400">
         cancel
       </button>
     </div>
@@ -137,12 +137,12 @@ export function ReviewQueuePage() {
     <Layout breadcrumb={<span>Review queue</span>}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">Review queue</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-lg font-semibold text-ink-900">Review queue</h1>
+          <p className="text-sm text-ink-500">
             {awaiting} agent run{awaiting === 1 ? '' : 's'} waiting on a human
           </p>
         </div>
-        <label className="flex items-center gap-2 text-xs text-slate-500">
+        <label className="flex items-center gap-2 text-xs text-ink-500">
           <input
             type="checkbox"
             checked={showAccepted}
@@ -156,19 +156,19 @@ export function ReviewQueuePage() {
 
       <div className="space-y-2">
         {shown.map((group) => (
-          <div key={group.run.id} className="rounded-lg border border-slate-200 bg-white">
+          <div key={group.run.id} className="rounded-lg border border-ink-200 bg-white">
             <div className="flex w-full items-center justify-between gap-3 px-4 py-3">
               <button
                 onClick={() => setOpen(open === group.run.id ? null : group.run.id)}
                 className="min-w-0 flex-1 text-left"
               >
-                <div className="text-sm font-medium text-slate-900">
+                <div className="text-sm font-medium text-ink-900">
                   {group.run.agent_type.replace(/_/g, ' ')}
                   {group.run.input_ref && (
-                    <span className="ml-2 font-normal text-slate-500">{group.run.input_ref}</span>
+                    <span className="ml-2 font-normal text-ink-500">{group.run.input_ref}</span>
                   )}
                 </div>
-                <div className="mt-0.5 text-xs text-slate-400">
+                <div className="mt-0.5 text-xs text-ink-400">
                   {group.draftCount} proposals ·{' '}
                   {Object.entries(group.byTable)
                     .map(([table, count]) => `${count} ${table.replace(/_/g, ' ')}`)
@@ -204,10 +204,10 @@ export function ReviewQueuePage() {
             </div>
 
             {open === group.run.id && (
-              <div className="border-t border-slate-100 px-4 py-3">
+              <div className="border-t border-ink-100 px-4 py-3">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-left text-slate-500">
+                    <tr className="text-left text-ink-500">
                       <th className="py-1 font-medium">Field</th>
                       <th className="py-1 font-medium">Proposed</th>
                       <th className="py-1 font-medium">Source</th>
@@ -217,15 +217,15 @@ export function ReviewQueuePage() {
                   </thead>
                   <tbody>
                     {group.sample.map((draft) => (
-                      <tr key={draft.id} className="border-t border-slate-50 align-top">
-                        <td className="py-1 pr-2 font-mono text-slate-500">{draft.field}</td>
-                        <td className="max-w-md py-1 pr-2 text-slate-800">
+                      <tr key={draft.id} className="border-t border-ink-50 align-top">
+                        <td className="py-1 pr-2 font-mono text-ink-500">{draft.field}</td>
+                        <td className="max-w-md py-1 pr-2 text-ink-800">
                           {typeof draft.proposed_value === 'object'
                             ? JSON.stringify(draft.proposed_value).slice(0, 160)
                             : String(draft.proposed_value)}
                         </td>
-                        <td className="py-1 pr-2 text-slate-500">{draft.source_location ?? '—'}</td>
-                        <td className="py-1 pr-2 text-slate-500">
+                        <td className="py-1 pr-2 text-ink-500">{draft.source_location ?? '—'}</td>
+                        <td className="py-1 pr-2 text-ink-500">
                           {draft.confidence === null ? '—' : draft.confidence.toFixed(2)}
                         </td>
                         <td className="py-1">
@@ -242,7 +242,7 @@ export function ReviewQueuePage() {
                   </tbody>
                 </table>
                 {group.draftCount > group.sample.length && (
-                  <p className="mt-2 text-xs text-slate-400">
+                  <p className="mt-2 text-xs text-ink-400">
                     Showing {group.sample.length} of {group.draftCount}. Accept on the package page.
                   </p>
                 )}
@@ -252,13 +252,13 @@ export function ReviewQueuePage() {
         ))}
 
         {shown.length === 0 && (
-          <p className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">
+          <p className="rounded-lg border border-ink-200 bg-white px-4 py-8 text-center text-sm text-ink-400">
             Nothing waiting. Run an agent, or turn on autopilot for a package.
           </p>
         )}
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-ink-400">
         Autopilot fills this queue and crosses no gate. Acceptance is a human act, and it is recorded
         with the name of the person who did it.
       </p>
