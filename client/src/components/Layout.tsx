@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AskPanel } from './AskPanel';
+import { RunningWork } from './RunningWork';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useSession } from '../lib/session';
 
@@ -77,6 +78,7 @@ export function Layout({ children, breadcrumb, projectId = null }: Props) {
 
       <main className="mx-auto w-full max-w-[1680px] flex-1 space-y-5 px-8 py-6">{children}</main>
 
+      <RunningWork projectId={projectId} />
       <AskPanel projectId={projectId} />
     </div>
   );

@@ -60,7 +60,22 @@ type JobRow = {
 const POLL_INTERVAL_MS = 1_000;
 const LEASE_SECONDS = 300;
 
-let running = false;
+/**
+ * How many jobs run at once.
+ *
+ * It was one, which meant queuing two agents made the second wait behind the
+ * first — index two drawing sets and the second sits idle for however long the
+ * first takes. There was never a correctness reason for that: `claim_job` is
+ * atomic (SELECT ... FOR UPDATE SKIP LOCKED), so concurrent workers cannot take
+ * the same job, and the lease already handles a worker dying mid-run.
+ *
+ * Three rather than more, because each in-flight job is a stream of large
+ * multimodal requests to the same API, and a burst that gets rate-limited and
+ * retried finishes later than one that never bursts.
+ */
+const MAX_CONCURRENT_JOBS = 3;
+
+let inFlight = 0;
 let timer: NodeJS.Timeout | null = null;
 
 async function finish(
@@ -136,16 +151,16 @@ export function startWorker(): void {
   if (timer) return;
 
   timer = setInterval(() => {
-    if (running) return; // one job at a time; the lease makes this safe anyway
-    running = true;
+    if (inFlight >= MAX_CONCURRENT_JOBS) return;
+    inFlight += 1;
     void runOne()
       .catch((error: unknown) => console.error('worker: unexpected error', error))
       .finally(() => {
-        running = false;
+        inFlight -= 1;
       });
   }, POLL_INTERVAL_MS);
 
-  console.log('worker: polling for jobs');
+  console.log(`worker: polling for jobs (up to ${MAX_CONCURRENT_JOBS} at a time)`);
 }
 
 export function stopWorker(): void {

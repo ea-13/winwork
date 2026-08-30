@@ -223,3 +223,50 @@ agentRunsRouter.get('/agent-runs/:id/stream', async (req, res) => {
 
   res.end();
 });
+
+/**
+ * Work in flight on this project.
+ *
+ * The worker polls the job queue on a timer inside the server process, so an
+ * agent run has never depended on a browser staying open — it survives
+ * navigation, a reload, and closing the laptop. What did not survive was the
+ * run id, which lived in React state, so leaving the page lost the only handle
+ * on work that was still happening.
+ *
+ * That is a bad failure to have: the work continues and costs money, and the
+ * person who started it has no way to see it. Asking the server what is running
+ * makes progress a property of the project rather than of one browser tab.
+ *
+ * Recently finished runs come back too, briefly. Something that completed while
+ * you were on another screen should not vanish without ever having been seen.
+ */
+agentRunsRouter.get('/projects/:projectId/runs/active', async (req, res) => {
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const sinceMinutes = 10;
+  const since = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
+
+  const { data, error } = await supabaseForUser(auth.token)
+    .from('agent_run')
+    .select('id, agent_type, status, input_ref, started_at, finished_at, token_cost')
+    .eq('project_id', req.params.projectId)
+    .or(`status.in.(QUEUED,RUNNING),finished_at.gte.${since}`)
+    .order('started_at', { ascending: false, nullsFirst: true })
+    .limit(10);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const runs = data ?? [];
+
+  res.json({
+    running: runs.filter((run) => run.status === 'QUEUED' || run.status === 'RUNNING'),
+    recentlyFinished: runs.filter((run) => run.status === 'DONE' || run.status === 'FAILED'),
+  });
+});
