@@ -158,6 +158,8 @@ export async function runCoverageAuditor(
 
         cost += costUsd;
 
+        ctx.spent(costUsd);
+
         for (const finding of value.findings) {
           total += 1;
 

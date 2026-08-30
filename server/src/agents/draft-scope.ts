@@ -378,6 +378,7 @@ async function draftFromSpec(
         drafted.push({ ...item, sourceFileId: document.id, sourceFilename: document.filename });
       }
       skipped.push(...value.skipped.map((note) => `${document.filename}: ${note}`));
+      ctx.spent(costUsd);
       return costUsd;
     } catch (caught) {
       await ctx.emit(
@@ -488,6 +489,7 @@ async function draftFromDrawing(
         drafted.push({ ...item, sourceFileId: document.id, sourceFilename: document.filename });
       }
       skipped.push(...value.skipped.map((note) => `${document.filename}: ${note}`));
+      ctx.spent(costUsd);
       return costUsd;
     } catch (caught) {
       // One batch failing must not lose the others. A run over a 25-sheet set is

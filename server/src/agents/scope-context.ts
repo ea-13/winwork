@@ -237,6 +237,8 @@ export async function runScopeContextDrafter(
 
     cost += costUsd;
 
+    ctx.spent(costUsd);
+
     for (const line of value.lines) {
       const item = batch[line.item_index];
       if (!item) continue;

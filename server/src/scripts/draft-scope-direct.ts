@@ -46,6 +46,9 @@ const ctx: AgentContext = {
   async recordSheets(_documentId: string, sheets: SheetIndexRow[]) {
     return sheets.length;
   },
+  spent(usd: number) {
+    console.log(`   [COST] $${usd.toFixed(4)}`);
+  },
 };
 
 try {

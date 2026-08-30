@@ -48,6 +48,20 @@ export type AgentContext = {
    * existence, and the type is what stops it.
    */
   recordSheets(documentId: string, sheets: SheetIndexRow[]): Promise<number>;
+  /**
+   * Records what a model call cost, in USD.
+   *
+   * `agent_run.token_cost` has existed since 0001 and has been null on every
+   * row ever written, because agents put their cost in an event payload and
+   * the worker finished the run without it. So the one number a business needs
+   * — what does a project cost to run — was uncomputable from the data.
+   *
+   * Called per model call rather than once at the end: a run that fails on its
+   * ninth batch still spent money on the first eight, and a cost record that
+   * only counts successful runs would understate the bill in exactly the cases
+   * you most want to know about.
+   */
+  spent(usd: number): void;
 };
 
 export type SheetIndexRow = {
@@ -81,6 +95,7 @@ type StartOptions = {
  */
 export class AgentRun implements AgentContext {
   private seq = 0;
+  private cost = 0;
 
   private constructor(
     readonly runId: string,
@@ -182,6 +197,10 @@ export class AgentRun implements AgentContext {
     return Buffer.from(await data.arrayBuffer());
   }
 
+  spent(usd: number): void {
+    if (Number.isFinite(usd) && usd > 0) this.cost += usd;
+  }
+
   /** See the note on AgentContext.recordSheets for why this exists at all. */
   async recordSheets(documentId: string, sheets: SheetIndexRow[]): Promise<number> {
     if (sheets.length === 0) return 0;
@@ -211,13 +230,21 @@ export class AgentRun implements AgentContext {
     return sheets.length;
   }
 
+  /**
+   * Closes the run and writes what it cost.
+   *
+   * The accumulated spend wins over anything passed in: it counts every model
+   * call the agent actually made, including the ones before a failure.
+   */
   async finish(status: 'DONE' | 'FAILED', tokenCost?: number): Promise<void> {
+    const total = this.cost > 0 ? this.cost : tokenCost;
+
     await this.db
       .from('agent_run')
       .update({
         status,
         finished_at: new Date().toISOString(),
-        ...(tokenCost === undefined ? {} : { token_cost: tokenCost }),
+        ...(total === undefined ? {} : { token_cost: total }),
       })
       .eq('id', this.runId);
   }

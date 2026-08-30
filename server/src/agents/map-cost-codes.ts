@@ -136,6 +136,8 @@ export async function runCostCodeMapper(
 
     cost += costUsd;
 
+    ctx.spent(costUsd);
+
     for (const mapping of value.mappings) {
       const item = batch[mapping.item_index];
       if (!item) continue;

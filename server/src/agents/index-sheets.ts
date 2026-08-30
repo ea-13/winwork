@@ -108,6 +108,8 @@ export async function runSheetIndexer(
 
     cost += costUsd;
 
+    ctx.spent(costUsd);
+
     for (const sheet of value.sheets) {
       // Rebase onto the real document by looking the page up in the batch's own
       // list, rather than assuming the batch is a contiguous run. It is today;
