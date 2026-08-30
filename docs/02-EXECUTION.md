@@ -57,6 +57,7 @@ P21–P28 are work that came out of real use and had no number before.
 | **P11** | Leveling matrix | ✅✅ | **Completed 2026-08-30** — weights, scoring, H6 selection. Was marked done without them |
 | **P40–P44** | Manual path, workspaces, cost codes | ✅ | Manual bids, blank rows, multi-tenant, cost codes, split bids |
 | **P45–P48** | AI-native surface | ✅ | Copilot suggestions, A10 coverage audit, A11 bid comparison, A12 cost-code mapper |
+| **P49** | Project assistant | ✅ | Chat with tools over the real project. Reads anything; writes no state |
 
 ---
 
@@ -609,3 +610,31 @@ audit rows; what went away was needing to know our words.
   minutes, and the estimate scales with `max_tokens` — so a large output budget
   is refused before the request is sent. Everything structured goes through
   `messages.stream()`, whose `finalMessage()` still carries `parsed_output`.
+
+
+## P49 · The project assistant
+
+The Ask panel could reason about a trade and read a document. It could not see
+the project — so "what is still open on this job" was a question the product
+could not answer about itself.
+
+`server/src/lib/chat-tools.ts` gives the assistant tools over the real data:
+project state, scope, context, package detail, bid detail, buyout, suggestions,
+and the leveling arithmetic. Everything runs through the caller's own database
+client, so RLS applies to the assistant exactly as it applies to them — an
+assistant running as `service_role` would be a way to read another tenant by
+asking nicely.
+
+**The rule line is unchanged.** Every tool is either a read, or a run of
+something that produces drafts or deterministic arithmetic. There is no tool
+that writes a scope item, accepts an extraction, disposes of a gap or selects a
+bidder. Those are gate crossings and they belong to a human with a written
+rationale — an assistant that could cross one would make the audit trail a
+record of what a model decided, which is what this product is sold against.
+
+Asked "what is still open on this job", it read three tools and answered with
+real scope ids, the four undecided gaps, the $44k exposure, and the fact that
+none of it is in the carried total yet. That is the product explaining itself.
+
+The tool loop is capped at eight rounds. A model calling tools in a circle is
+the failure that burns an API budget quietly.

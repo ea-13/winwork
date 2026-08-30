@@ -322,6 +322,9 @@ export async function suggestFor(
         step: 'bids',
         packageId: id,
         packageName: name,
+        // Reads every unread bid on the package. It stops there — publishing
+        // each one into the project is still a human act at H5 (R4).
+        action: { path: `/packages/${id}/autopilot` },
         estimate: 'about a minute per bid',
       });
     }

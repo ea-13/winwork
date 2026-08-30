@@ -37,7 +37,9 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
   const [division, setDivision] = useState<string>(GENERAL);
   const [docsOpen, setDocsOpen] = useState(false);
   const [attached, setAttached] = useState<Set<string>>(new Set());
-  const [mode, setMode] = useState<'EXPERT' | 'DOCUMENT'>('EXPERT');
+  // PROJECT is the assistant that can read the project and run things.
+  // EXPERT reasons about the trade; DOCUMENT answers from the files.
+  const [mode, setMode] = useState<'PROJECT' | 'EXPERT' | 'DOCUMENT'>('PROJECT');
   const [question, setQuestion] = useState('');
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,13 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
       setError(null);
       setQuestion('');
 
+      // Snapshot before the optimistic message goes in, so the history sent is
+      // the real conversation and not one with this turn duplicated.
+      const priorTurns = messages.map((message) => ({
+        role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
+        content: message.content,
+      }));
+
       // Optimistic, so the question is on screen while the answer is composed.
       setMessages((current) => [
         ...current,
@@ -76,6 +85,36 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
       ]);
 
       try {
+        // The project assistant is a different thing from the expert: it holds
+        // tools over this project's real data, so it does not need a thread of
+        // retrieved knowledge — it goes and looks.
+        if (mode === 'PROJECT') {
+          if (!projectId) {
+            setError('Open a project first — this mode answers from the project itself.');
+            return;
+          }
+
+          const result = await apiPost<{ reply: string; toolsUsed: { tool: string }[] }>(
+            `/projects/${projectId}/chat`,
+            { messages: [...priorTurns, { role: 'user' as const, content: text }] },
+          );
+
+          setMessages((current) => [
+            ...current,
+            {
+              id: `reply-${current.length}`,
+              seq: current.length,
+              role: 'EXPERT',
+              content: result.reply,
+              citations: (result.toolsUsed ?? []).map((entry) => ({
+                kind: 'read',
+                ref: entry.tool.replace(/^get_|^run_/, ''),
+              })),
+            },
+          ]);
+          return;
+        }
+
         let id = threadId;
         if (!id) {
           const thread = await apiPost<Thread>('/consult/threads', {
@@ -107,7 +146,7 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
         setThinking(false);
       }
     },
-    [question, thinking, threadId, projectId, attached, mode, division],
+    [question, thinking, threadId, projectId, attached, mode, division, messages],
   );
 
   if (!open) {
@@ -126,21 +165,21 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
       <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-slate-900">Ask an expert</span>
-          <div className="flex rounded border border-slate-300 text-[11px]">
-            {(['EXPERT', 'DOCUMENT'] as const).map((option) => (
+          <div className="flex rounded border border-ink-300 text-[11px]">
+            {([
+              ['PROJECT', 'project', 'Reads this project and can run the agents'],
+              ['EXPERT', 'trade', 'Reasons from division knowledge and gap patterns'],
+              ['DOCUMENT', 'docs', 'Answers only from the attached documents'],
+            ] as const).map(([option, label, hint]) => (
               <button
                 key={option}
                 onClick={() => setMode(option)}
                 className={`px-1.5 py-0.5 ${
-                  mode === option ? 'bg-slate-900 text-white' : 'text-slate-500'
+                  mode === option ? 'bg-ink-900 text-white' : 'text-ink-500'
                 }`}
-                title={
-                  option === 'EXPERT'
-                    ? 'Reasons from division knowledge and gap patterns'
-                    : 'Answers only from the attached documents'
-                }
+                title={hint}
               >
-                {option === 'EXPERT' ? 'trade' : 'docs'}
+                {label}
               </button>
             ))}
           </div>
@@ -246,7 +285,11 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
       <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
         {messages.length === 0 && (
           <p className="pt-6 text-center text-xs text-slate-400">
-            Ask about a division, a detail, or what a document actually says.
+            {mode === 'PROJECT'
+              ? 'Ask about this project — what is open, why a bid is cheaper, what to do next. It reads the real data.'
+              : mode === 'EXPERT'
+                ? 'Ask about a trade, a detail, or who normally carries what.'
+                : 'Ask what the attached documents actually say.'}
             <br />
             Answers cite what they rest on, and never give a price.
           </p>
@@ -283,7 +326,11 @@ export function AskPanel({ projectId }: { projectId: string | null }) {
             if (event.key === 'Enter' && !event.shiftKey) void ask(event);
           }}
           rows={2}
-          placeholder="Who normally carries head-of-wall firestopping?"
+          placeholder={
+            mode === 'PROJECT'
+              ? 'What is still open on this job?'
+              : 'Who normally carries head-of-wall firestopping?'
+          }
           className="w-full resize-none rounded border border-slate-300 px-2 py-1.5 text-xs outline-none focus:border-slate-900"
         />
       </form>
