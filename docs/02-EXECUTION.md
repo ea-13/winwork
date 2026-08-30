@@ -507,6 +507,68 @@ pattern that should come out of the knowledge base.
 
 ---
 
+# Where we stand
+
+**As of 2026-08-31 · roughly 85% of a presentable MVP · last push `020b6a1`.**
+
+Read this and the list below before anything else. `npm run resume` points here.
+
+## The 15% is calibration, not features
+
+The gap between this and a sellable product is **not** more screens. It is two
+things that need Elie's data rather than more code:
+
+1. **Real division-expert playbooks.** All 21 divisions exist with placeholder
+   gap patterns marked `SEED_STUB`. They are common industry checks, not
+   calibrated knowledge, and R5 keeps them internal until they are.
+2. **A closed job's change-order list.** `gap_pattern.times_confirmed` has never
+   been checked against reality. P14 exists end to end — import, matching,
+   verdicts, report, XLSX, screen — and has never seen a real CO.
+
+Everything else on the open list is a day's work each.
+
+## Build status
+
+| | |
+|---|---|
+| **Complete** | P0–P12, P15–P28, P29–P49 |
+| **Partial** | **P13** division experts — agent built, playbook content is stubs · **P17** autopilot — narrowed deliberately, see that section · **P20** hardening — isolation sweep and bundle check done, rate limits open |
+| **P14** | No longer parked. API, screen and QA are done; it is waiting on data |
+| **Scale** | 22 migrations · 24 route files · 11 agents · 32 screens and components · 25 template divisions |
+
+## The verification bar
+
+Four commands. All four must be clean before a push, and they are the only
+claim this project makes about itself that is worth anything.
+
+```
+npx tsc -b        TS = 0
+npm run build     client + server clean; check-bundle finds no server secret
+npm run verify    3 suites — RLS, agent runtime, cross-tenant isolation
+npm run qa        100 feature checks against a throwaway project
+```
+
+`verify` proves the RULES hold. `qa` proves the FEATURES do. They fail
+differently and both are needed: a broken rule is a breach, a broken feature is a
+morning where nothing works and nobody can say why.
+
+## Next steps, in the order to take them
+
+1. **Import to Replit and confirm 1:1.** Elie runs this; it has matched local
+   every time so far but the check is cheap and the failure is expensive.
+2. **Load real demo data.** L1 and L2 will surface failures that no amount of
+   building finds. This is the highest-value next action by a wide margin.
+3. **L15, then L4.** A day each, and both are the same complaint already made
+   once: a proposal you have to leave the table to look at is a proposal nobody
+   looks at, and every table should be the grid.
+4. **Rate limiting (L7)** before this is exposed to anyone outside the building.
+
+Deferred by Elie's own choice, and correctly: line-level bid data (three lump
+sums rank but never reorder — the flip needs comparable priced lines), and real
+division-expert playbooks.
+
+---
+
 # What is left
 
 **This is the running list.** Update it as things land; it is the first thing to

@@ -147,6 +147,10 @@ Next
   npm run dev            API on :3001, client on :5173
   login                  ${env.DEMO_USER_EMAIL} / DEMO_USER_PASSWORD from .env
 
-  Open docs/02-EXECUTION.md — the "What is left" section at the end is the
-  running list, and it is the file to update as things land.
+  Open docs/02-EXECUTION.md and read the last two sections:
+    "Where we stand"  — build status, the verification bar, next steps in order
+    "What is left"    — the running list. Update it as things land.
+
+  Before any push: npx tsc -b, npm run build, npm run verify, npm run qa.
+  All four clean, and check .env.example carries no real values.
 `);
