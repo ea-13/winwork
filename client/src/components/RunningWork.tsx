@@ -146,8 +146,13 @@ export function RunningWork({ projectId }: { projectId: string | null }) {
   return (
     <div className="fixed bottom-5 left-5 z-40 w-80 max-w-[90vw] space-y-1.5">
       {shown.map((run) => {
-        const live = run.status === 'QUEUED' || run.status === 'RUNNING';
-        const failed = run.status === 'FAILED' || run.jobStatus === 'CANCELLED';
+        // The RUN stays RUNNING until the worker notices the cancellation, so
+        // asking the run alone means a cancelled row keeps offering Cancel and
+        // never offers dismiss — the button works and the screen says it did
+        // not. The job is what was cancelled, so the job decides.
+        const cancelled = run.jobStatus === 'CANCELLED';
+        const live = !cancelled && (run.status === 'QUEUED' || run.status === 'RUNNING');
+        const failed = run.status === 'FAILED';
         const queued = run.jobStatus === 'QUEUED';
         const canRetry = Boolean(run.jobId) && !live;
         const working = busy === run.jobId;
@@ -156,13 +161,13 @@ export function RunningWork({ projectId }: { projectId: string | null }) {
           <div
             key={run.id}
             className={`rounded-lg border bg-white shadow-lg ${
-              failed ? 'border-red-200' : live ? 'border-ink-300' : 'border-emerald-200'
+              failed ? 'border-red-200' : cancelled ? 'border-ink-200' : live ? 'border-ink-300' : 'border-emerald-200'
             }`}
           >
             <div className="flex items-center gap-2 px-3 py-2">
               <span
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                  failed ? 'bg-red-500' : live ? 'animate-pulse bg-ink-800' : 'bg-emerald-500'
+                  failed ? 'bg-red-500' : cancelled ? 'bg-ink-300' : live ? 'animate-pulse bg-ink-800' : 'bg-emerald-500'
                 }`}
               />
 
@@ -172,11 +177,13 @@ export function RunningWork({ projectId }: { projectId: string | null }) {
               >
                 <span className="block truncate text-xs font-medium text-ink-900">
                   {LABEL[run.agent_type] ?? run.agent_type.replace(/_/g, ' ')}
-                  {run.jobStatus === 'CANCELLED' && (
-                    <span className="ml-1.5 text-ink-500">cancelled</span>
+                  {cancelled && (
+                    <span className="ml-1.5 text-ink-500">
+                      {run.status === 'RUNNING' ? 'stopping…' : 'cancelled'}
+                    </span>
                   )}
                   {run.status === 'FAILED' && <span className="ml-1.5 text-red-700">failed</span>}
-                  {!live && run.status === 'DONE' && (
+                  {!live && !cancelled && run.status === 'DONE' && (
                     <span className="ml-1.5 text-emerald-700">done</span>
                   )}
                   {queued && <span className="ml-1.5 text-ink-400">queued</span>}

@@ -96,8 +96,14 @@ queueRouter.get('/queue', async (req, res) => {
     // Position is 1-based and reflects the real ordering, so "you are third"
     // means third.
     queued: waiting.map((job, index) => ({ ...job, position: index + 1 })),
+    // MOST RECENT fifteen, not the first fifteen. The list above is ordered
+    // the way claim_job orders it — priority desc, then oldest first — which is
+    // right for what runs next and exactly wrong for what just happened. Taking
+    // the head of it meant a job you cancelled a second ago was never in the
+    // response, so the button looked broken while having worked perfectly.
     finished: shaped
       .filter((job) => ['DONE', 'FAILED', 'DEAD_LETTER', 'CANCELLED'].includes(job.status))
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
       .slice(0, 15),
   });
 });

@@ -425,6 +425,41 @@ check('the queue reads', queue.status === 200 && Array.isArray(queue.body.queued
 const ghostCancel = await api('/jobs/00000000-0000-0000-0000-000000000000/cancel', 'POST');
 check('cancelling an unknown job 404s', ghostCancel.status === 404);
 
+// Cancelling worked all along; the cancelled job just fell off the end of
+// /queue, so the button looked broken. Regression test for exactly that.
+const tenantForJob = (await (await admin('tenant?select=id&limit=1')).json())[0]?.id;
+const seeded = await (
+  await admin('job', 'POST', {
+    tenant_id: tenantForJob,
+    job_type: 'extract_quote',
+    payload: {},
+    status: 'IN_PROGRESS',
+    lease_expires_at: new Date(Date.now() + 600_000).toISOString(),
+  })
+).json();
+const seededJobId = seeded[0]?.id;
+
+const stopped = await api(`/jobs/${seededJobId}/cancel`, 'POST');
+check('cancelling an in-flight job succeeds', stopped.status === 200);
+
+const afterCancel = await api('/queue');
+const cancelledRow = [
+  ...(afterCancel.body?.running ?? []),
+  ...(afterCancel.body?.queued ?? []),
+  ...(afterCancel.body?.finished ?? []),
+].find((row) => row.id === seededJobId);
+check('a cancelled job is still visible in the queue', Boolean(cancelledRow));
+check(
+  'it reports as CANCELLED',
+  cancelledRow?.status === 'CANCELLED',
+  String(cancelledRow?.status),
+);
+
+const cancelledTwice = await api(`/jobs/${seededJobId}/cancel`, 'POST');
+check('cancelling twice is harmless', [200, 409].includes(cancelledTwice.status));
+
+await admin(`job?id=eq.${seededJobId}`, 'DELETE');
+
 const retryUnknown = await api('/jobs/00000000-0000-0000-0000-000000000000/retry', 'POST');
 check('requeueing an unknown job 404s', retryUnknown.status === 404);
 

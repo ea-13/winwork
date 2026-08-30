@@ -553,7 +553,7 @@ claim this project makes about itself that is worth anything.
 npx tsc -b        TS = 0
 npm run build     client + server clean; check-bundle finds no server secret
 npm run verify    3 suites — RLS, agent runtime, cross-tenant isolation
-npm run qa        104 feature checks against a throwaway project
+npm run qa        108 feature checks against a throwaway project
 ```
 
 `verify` proves the RULES hold. `qa` proves the FEATURES do. They fail
@@ -595,6 +595,19 @@ read when picking the build back up, and `npm run resume` points at it.
 | **L16** | Hindsight needs one real closed job through it end to end | Every piece is built and tested against seeded data. It has never seen a real change-order log, and that is the only thing that calibrates `gap_pattern.times_confirmed` |
 
 ### Done 2026-08-31 · third pass
+
+- **The cancel button, which did work.** Reported as broken; it had been writing
+  `cancelled_at` correctly the whole time. Two things conspired to hide it:
+  `/queue` returned the FIRST fifteen finished jobs from a list ordered the way
+  `claim_job` orders it — priority desc, oldest first — which is right for what
+  runs next and exactly wrong for what just happened, so a job cancelled a second
+  ago was never in the response. And the running-work panel decided "is this
+  live" from the RUN, which stays `RUNNING` until the worker notices, so the row
+  kept offering Cancel and never offered dismiss. The job is what was cancelled,
+  so the job now decides, and a cancelled-but-still-running job reads
+  **stopping…** rather than pretending it has already stopped. Regression test
+  added: cancel an in-flight job, then assert it is still visible in the queue
+  and reports as CANCELLED.
 
 - **The copilot is quiet by default.** It sat expanded at the top of every
   project screen offering advice nobody asked for on that visit, and advice that
