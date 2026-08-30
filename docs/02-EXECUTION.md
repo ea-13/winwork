@@ -518,14 +518,49 @@ read when picking the build back up, and `npm run resume` points at it.
 |---|---|---|
 | **L1** | Drawing→scope still loses a batch to output truncation on a real stamped set | Batch isolation means the run survives it, but ~8% of sheets go unread. `effort: 'low'` is the current mitigation and has not been tested across a full 13-batch run |
 | **L2** | Spec-side drafting has never run on a real specification | Every fix so far came from drawings. A 200-page text spec is a different shape and will have its own failure |
-| **L3** | Scope template covers 15 divisions; 01, 04, 11–14, 25, 27, 32 are thin or absent | The container list is what an estimator judges the product on in the first ten seconds |
 | **L4** | `Solicitation` still carries a hand-rolled table | Scope, buyout and the bid tab are on the grid. Solicitation is the last one that is not |
 | **L5** | Formulas are per-cell and browser-local | A formula is lost on reload and cannot reference another package's total. Fine for entry, not for a model |
-| **L6** | Gap→pattern promotion is manual with no UI | `MISSED_GAP` rows are the corpus. Nothing turns one into a `gap_pattern`, so the loop only half closes |
 | **L7** | Rate limiting, and PDF robustness on malformed files | Carried from P20 |
-| **L8** | Deploy to Replit | Config is correct and the production path is verified locally. The import has never been run |
-| **L13** | P14 has no UI | The API is complete and tested — import, report, verdicts, XLSX export. There is no screen, and no real CO data has been through it |
-| **L14** | Multi-tenant has no way to invite anyone | A client workspace can be created and worked in, but not handed over. That is the next thing it needs to be worth anything |
+| **L15** | Drafted **context** is still accepted from a banner, not in the table | Exactly the complaint that produced the in-table scope review. Context lines are read one scope item at a time in a side panel, and there is no way to see all of a run's proposals at once |
+
+### Done 2026-08-31
+
+- **The review-and-accept flow, rebuilt.** Drafted scope items are no longer
+  announced as a count in a banner. They appear as shaded rows inside the scope
+  table, grouped with the package they would join, editable cell by cell,
+  rejectable row by row, and accepted at the bottom with a reason. Edits ride
+  along as overrides: they land on the scope item, and the draft still says what
+  the agent said. The audit event records which fields a human changed and which
+  drafts they threw out, so "did they accept it as written" is answerable.
+- **Multi-select on the grid.** Row numbers pick rows, shift-click spans a range.
+  Picked rows can be merged, deleted, or talked to — the table command scopes
+  itself to a pick, so four lines can be changed by saying so once instead of
+  describing them.
+- **Merging scope lines** (`POST /projects/:id/scope-items/merge`). Keeps the
+  `scope_id` every quote line, gap and change order joins on; fills only blank
+  fields on the kept row; carries context lines and package membership across;
+  and refuses to sum quantities, reporting the dropped ones instead. Two rows may
+  be duplicates or may be two real numbers, and nothing in the merge can tell
+  which — R1 says the guess does not get written.
+- **L3** — the nine thin template divisions filled in: 01, 04, 11, 12, 13, 14,
+  25, 27, 32. Twenty-four divisions now carry real inclusions, interfaces and
+  assumptions rather than a heading.
+- **L6** — a `MISSED_GAP` outcome can be promoted to a `gap_pattern` from the
+  scope context panel, creating a division expert stub if the division has none.
+  The learning loop closes.
+- **L13** — Hindsight has a screen, at `/hindsight`. Four tiles, per-CO verdict
+  buttons, XLSX export, and the catch rate withheld below five reviewed change
+  orders.
+- **L14** — workspace invites. Creates the auth user, the `app_user` row, the
+  roles and the membership, and hands back a one-time password, because R3 means
+  there is no send path and there is not going to be one.
+- **`verify:rls` corrected.** It was still asserting the rule migration 0021
+  deliberately changed, so the suite failed on purpose-built behaviour. Both
+  directions are now asserted: a draft CAN be deleted (a project you cannot
+  delete is not a product) and a draft still CANNOT be updated.
+- **QA suite 69 → 100 checks**, including the accept-with-changes path proven
+  end to end against seeded drafts — the override lands, the rejected row is
+  never written, and the draft is unchanged afterwards.
 
 ### Done 2026-08-30
 
