@@ -12,6 +12,7 @@ import { buyoutRouter } from './routes/buyout.js';
 import { consultRouter } from './routes/consult.js';
 import { contextRouter } from './routes/context.js';
 import { corpusRouter } from './routes/corpus.js';
+import { costCodesRouter } from './routes/cost-codes.js';
 import { documentsRouter } from './routes/documents.js';
 import { gatesRouter } from './routes/gates.js';
 import { levelingRouter } from './routes/leveling.js';
@@ -22,6 +23,7 @@ import { recordsRouter } from './routes/records.js';
 import { sessionRouter } from './routes/session.js';
 import { solicitationRouter } from './routes/solicitation.js';
 import { subsRouter } from './routes/subs.js';
+import { workspacesRouter } from './routes/workspaces.js';
 
 const app = express();
 
@@ -42,9 +44,11 @@ app.use('/api', requireAuth, quotesRouter);
 app.use('/api', requireAuth, levelingRouter);
 app.use('/api', requireAuth, buyoutRouter);
 app.use('/api', requireAuth, subsRouter);
+app.use('/api', requireAuth, workspacesRouter);
 app.use('/api', requireAuth, solicitationRouter);
 app.use('/api', requireAuth, autopilotRouter);
 app.use('/api', requireAuth, corpusRouter);
+app.use('/api', requireAuth, costCodesRouter);
 app.use('/api', requireAuth, consultRouter);
 app.use('/api', requireAuth, contextRouter);
 app.use('/api', requireAuth, archaeologyRouter);

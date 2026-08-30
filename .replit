@@ -3,12 +3,30 @@
 #
 # Secrets are set in Replit's own Secrets pane, never here:
 #   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
-#   ANTHROPIC_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, NODE_ENV
+#   ANTHROPIC_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+#
+# NODE_ENV is set below, not in Secrets — it is configuration, not a credential.
 #
 # DATABASE_URL is deliberately NOT needed here. Migrations run from a developer
 # machine; the app reaches Postgres through PostgREST with the keys above.
+#
+# ---------------------------------------------------------------------------
+# WHY `run` BUILDS FIRST
+#
+# `npm run start` is `node dist/index.js`, and in production it also serves the
+# compiled client out of `client/dist`. Neither dist directory is committed —
+# both are gitignored — so a workspace that only runs `start` serves whatever
+# build happened to be lying around, or nothing at all.
+#
+# That is exactly how the Repl came to look "close but not the same" as local:
+# the deployment target builds, the workspace never did, so the workspace was
+# running an older client against current server code.
+#
+# Building on every run costs about a minute and removes a whole class of
+# "why does Replit look different" questions. Worth it.
+# ---------------------------------------------------------------------------
 
-run = "npm run start"
+run = "npm install && npm run build && npm run start"
 entrypoint = "server/src/index.ts"
 modules = ["nodejs-22"]
 
@@ -20,6 +38,8 @@ build = ["sh", "-c", "npm install && npm run build"]
 run = ["sh", "-c", "npm run start"]
 deploymentTarget = "cloudrun"
 
+# `npm run start` serves the API and the built client on one port, so there is
+# only one to expose. PORT is injected by the host and read in server/src/env.ts.
 [[ports]]
 localPort = 3001
 externalPort = 80

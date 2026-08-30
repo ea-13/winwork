@@ -54,6 +54,8 @@ P21–P28 are work that came out of real use and had no number before.
 | **P14** | Change-order archaeology | ⏸ | Parked — needs a closed job's change orders |
 | **P29–P34** | The walkthrough build | ✅ | Chain nav, uploads, drawings→scope, packages, bid tab, context |
 | **P35–P39** | Restructure and first real run | ✅ | Five steps, Excel grid, scope template, real plan set indexed |
+| **P11** | Leveling matrix | ✅✅ | **Completed 2026-08-30** — weights, scoring, H6 selection. Was marked done without them |
+| **P40–P44** | Manual path, workspaces, cost codes | ✅ | Manual bids, blank rows, multi-tenant, cost codes, split bids |
 
 ---
 
@@ -515,7 +517,7 @@ read when picking the build back up, and `npm run resume` points at it.
 | **L1** | **Drawing→scope truncation** — 1 batch in 13 lost its answer mid-JSON on a real stamped set | Batch isolation means the run survives it, but ~8% of the sheets go unread. Thinking is now capped at 6k of a 48k budget, which is untested against a full run |
 | **L2** | Spec-side drafting has never run on a real specification | Every fix so far came from drawings. A 200-page text spec is a different shape and will have its own failure |
 | **L3** | Scope template covers 15 divisions; 01, 04, 11–14, 23 partial, 25, 27, 32 are thin or absent | The container list is the thing an estimator judges the product on in the first ten seconds |
-| **L4** | `PACKAGE_TABLE` retired but `Solicitation`, `LevelingMatrix` and `BidTab` still carry their own hand-rolled tables | The Excel surface is only on Scope & Packages. It was asked for on *all* tables |
+| **L4** | `Solicitation` and `BidTab` still carry hand-rolled tables | The Excel surface is on Scope & Packages only. Asked for on *all* tables |
 | **L5** | Formulas are per-cell and browser-local | A formula is lost on reload, and cannot reference another package's total. Fine for entry, not for a model |
 | **L6** | Gap→pattern promotion is manual with no UI | `MISSED_GAP` rows are the corpus. There is no screen that turns one into a `gap_pattern`, so the loop only half closes |
 | **L7** | Rate limiting, and PDF robustness on malformed files | Carried from P20 |
@@ -540,3 +542,28 @@ read when picking the build back up, and `npm run resume` points at it.
   serves code that is not in the repo and every symptom points somewhere else.
 
 `npm run resume` clears both before doing anything else.
+
+## Added 2026-08-30
+
+| | What | Why it matters |
+|---|---|---|
+| **L9** | Leveling and Buyout are still separate steps | Asked for as one surface: buyout as the summary, leveling as the per-sub detail reached by clicking a division header rather than a tab |
+| **L10** | Cost codes exist and import, but nothing is organised by them yet | Scope and packages carry `cost_code_id`; no screen groups or sorts by it, and the Excel import has no UI |
+| **L11** | Quote splitting has no UI | The API is done and tested — one bid across two packages levels correctly at each allocated amount. There is no screen to do it |
+| **L12** | P14 hindsight is schema-only | `change_order` carries `scope_item_id`, `matched_gap_id` and a `hindsight` verdict. No matching logic, no report, no screen. Elie is bringing a closed job's CO list this week |
+
+### What P14 is actually for
+
+Clarified 2026-08-30 and worth writing down, because the original framing was
+wrong. It is **not** a change-order tracker. It is a **backtest**:
+
+> Load a finished job's bid set and bids as if it were precon. Run gap detection.
+> Put the real change-order list next to the gaps we flagged.
+
+"Of your 31 change orders, 19 were scope gaps, and we would have flagged 14 of
+them worth $340k before you bought the job" is the sales argument, and it is also
+the only honest way to calibrate `gap_pattern.times_confirmed` — which has never
+been confirmed against reality.
+
+Once buyout is complete this tool is finished. Tracking change orders during
+construction is a different product living somewhere else.

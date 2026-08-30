@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AskPanel } from './AskPanel';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useSession } from '../lib/session';
 
 type Props = {
@@ -35,6 +36,10 @@ export function Layout({ children, breadcrumb, projectId = null }: Props) {
           <Link to="/" className="text-[13px] font-semibold tracking-tight text-ink-900">
             WinProjects
           </Link>
+
+          <span className="h-4 w-px bg-ink-200" />
+          <WorkspaceSwitcher />
+          <span className="h-4 w-px bg-ink-200" />
 
           <nav className="flex items-center gap-1">
             {nav.map((item) => (

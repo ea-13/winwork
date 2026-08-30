@@ -48,6 +48,23 @@ type Props = {
   /** Applies one row's changed fields. Should throw on failure. */
   onCommit: (rowId: string, patch: Record<string, unknown>) => Promise<void>;
   onAddRow?: () => Promise<void>;
+  /**
+   * Creates a real row and returns its id, so typing into a blank row at the
+   * bottom materialises it — the way a spreadsheet behaves.
+   *
+   * Without this the grid shows `blankRows` phantom rows that cannot be typed
+   * into, which would be worse than not showing them.
+   */
+  onCreateRow?: () => Promise<string | null>;
+  /**
+   * How many empty rows to keep at the bottom.
+   *
+   * An empty grid with an "Add row" button makes you click once per line, and
+   * entering twenty scope items becomes twenty clicks and twenty round trips.
+   * A spreadsheet just has rows. These are not saved until something is typed
+   * into them, so an untouched grid still writes nothing.
+   */
+  blankRows?: number;
   emptyMessage?: string;
   /**
    * Optional grouping. `groupOf` names the group a row belongs to; a header
@@ -67,6 +84,9 @@ type Cell = { r: number; c: number };
 type SaveState = 'saving' | 'saved' | 'error';
 
 const key = (cell: Cell): string => `${cell.r}:${cell.c}`;
+
+/** Marks a row that exists only on screen until somebody types into it. */
+const PHANTOM = '__blank__';
 
 // ---------------------------------------------------------------- formatting
 
@@ -134,9 +154,11 @@ function parse(input: string, type: CellType | undefined): unknown {
 
 export function Grid({
   columns,
-  rows,
+  rows: dataRows,
   onCommit,
   onAddRow,
+  onCreateRow,
+  blankRows = 0,
   emptyMessage,
   groupOf,
   renderGroup,
@@ -159,6 +181,27 @@ export function Grid({
     () => columns.map((column) => column.editable !== false),
     [columns],
   );
+
+  /**
+   * The real rows plus the blank ones on the end.
+   *
+   * Phantom ids are prefixed so nothing downstream can mistake one for a
+   * database row; committing into a phantom creates the real row first.
+   */
+  const phantomCount = onCreateRow ? blankRows : 0;
+
+  const rows = useMemo<GridRow[]>(
+    () => [
+      ...dataRows,
+      ...Array.from({ length: phantomCount }, (_, index) => ({
+        id: `${PHANTOM}${index}`,
+      })) as GridRow[],
+    ],
+    [dataRows, phantomCount],
+  );
+
+  const isPhantom = (row: GridRow | undefined): boolean =>
+    typeof row?.id === 'string' && row.id.startsWith(PHANTOM);
 
   const clampCell = useCallback(
     (cell: Cell): Cell => ({
@@ -247,9 +290,19 @@ export function Grid({
 
   const commitCell = useCallback(
     async (cell: Cell, raw: string) => {
-      const row = rows[cell.r];
+      let row = rows[cell.r];
       const column = columns[cell.c];
       if (!row || !column) return;
+
+      // Typing into one of the blank rows at the bottom brings it into
+      // existence. Nothing is written for a blank row nobody touched, so an
+      // untouched grid stays an empty grid.
+      if (isPhantom(row)) {
+        if (raw.trim() === '' || !onCreateRow) return;
+        const createdId = await onCreateRow();
+        if (!createdId) return;
+        row = { ...row, id: createdId };
+      }
 
       let input = raw;
 
@@ -292,7 +345,7 @@ export function Grid({
 
       await commit(row.id, { [column.key]: value }, [cell], { [column.key]: before });
     },
-    [rows, columns, commit, lookup],
+    [rows, columns, commit, lookup, onCreateRow],
   );
 
   // ------------------------------------------------------------- navigation
@@ -625,7 +678,11 @@ export function Grid({
                   </tr>
                 )}
               <tr>
-                <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-slate-50 px-2 py-1 text-right text-xs text-slate-400">
+                <td
+                  className={`sticky left-0 z-10 border-b border-r border-slate-200 px-2 py-1 text-right text-xs ${
+                    isPhantom(row) ? 'bg-white text-slate-300' : 'bg-slate-50 text-slate-400'
+                  }`}
+                >
                   {r + 1}
                 </td>
                 {columns.map((column, c) => {

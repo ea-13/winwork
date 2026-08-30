@@ -149,6 +149,45 @@ type DocumentInput = {
 
 type Drafted = z.infer<typeof Item> & { sourceFileId: string; sourceFilename: string };
 
+/**
+ * Runs batches concurrently, keeping at most `limit` in flight.
+ *
+ * The first version read the sheets one after another, which on a 25-sheet set
+ * is thirteen streaming calls of two-and-a-half minutes each and half an hour
+ * of staring at a progress line. The work is entirely independent — one batch
+ * of drawings tells you nothing about another — so serialising it bought
+ * nothing at all.
+ *
+ * Four at a time rather than all of them: the model API rate-limits, and a
+ * burst of thirteen large multimodal requests is the shape that gets throttled
+ * and then retried, which is slower than not bursting.
+ */
+async function inParallel<T, R>(
+  items: T[],
+  limit: number,
+  work: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) return;
+      results[index] = await work(items[index] as T, index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
+/** How many model calls are in flight at once when reading a drawing set. */
+const BATCH_CONCURRENCY = 4;
+
+
+
 /** Which sheets are worth reading for the divisions asked for. */
 function sheetsForDivisions(
   sheets: NonNullable<DocumentInput['sheets']>,
@@ -314,7 +353,7 @@ async function draftFromSpec(
 
   let cost = 0;
 
-  for (const [index, batch] of batches.entries()) {
+  const costs = await inParallel(batches, BATCH_CONCURRENCY, async (batch, index) => {
     if (batches.length > 1) {
       await ctx.emit(
         'INFO',
@@ -322,26 +361,36 @@ async function draftFromSpec(
       );
     }
 
-    const { value, costUsd } = await extractStructured({
-      system: SPEC_SYSTEM,
-      schema: Draft,
-      pdf: batch.bytes,
-      instruction:
-        `Draft scope items from this excerpt. It begins at page ${batch.firstPage} of the ` +
-        `full document, so cite pages from ${batch.firstPage} onwards.` +
-        (divisions.length > 0 ? ` Limit to CSI divisions ${divisions.join(', ')}.` : ''),
-      maxTokens: 48000,
-      // Reading is the easy part here; writing it all down is the long part.
-      thinkingBudget: 6000,
-    });
+    try {
+      const { value, costUsd } = await extractStructured({
+        system: SPEC_SYSTEM,
+        schema: Draft,
+        pdf: batch.bytes,
+        instruction:
+          `Draft scope items from this excerpt. It begins at page ${batch.firstPage} of the ` +
+          `full document, so cite pages from ${batch.firstPage} onwards.` +
+          (divisions.length > 0 ? ` Limit to CSI divisions ${divisions.join(', ')}.` : ''),
+        maxTokens: 48000,
+        thinkingBudget: 6000,
+      });
 
-    cost += costUsd;
-
-    for (const item of value.items) {
-      drafted.push({ ...item, sourceFileId: document.id, sourceFilename: document.filename });
+      for (const item of value.items) {
+        drafted.push({ ...item, sourceFileId: document.id, sourceFilename: document.filename });
+      }
+      skipped.push(...value.skipped.map((note) => `${document.filename}: ${note}`));
+      return costUsd;
+    } catch (caught) {
+      await ctx.emit(
+        'WARNING',
+        `${document.filename} — could not read pages ${batch.firstPage}–${batch.lastPage}: ` +
+          `${caught instanceof Error ? caught.message : String(caught)}. ` +
+          'The rest of the document was still read.',
+      );
+      return 0;
     }
-    skipped.push(...value.skipped.map((note) => `${document.filename}: ${note}`));
-  }
+  });
+
+  cost += costs.reduce((total, value) => total + value, 0);
 
   return cost;
 }
@@ -394,7 +443,9 @@ async function draftFromDrawing(
     DRAWING_DRAFT_BATCH,
   );
 
-  for (const group of groups) {
+  // Four at a time. The batches are independent, so the only thing serialising
+  // them ever bought was a tidier activity stream.
+  const costs = await inParallel(groups, BATCH_CONCURRENCY, async (group) => {
     const inGroup = group.pages
       .map((page) => byPage.get(page))
       .filter(Boolean) as NonNullable<DocumentInput['sheets']>;
@@ -407,30 +458,18 @@ async function draftFromDrawing(
       )
       .join('\n');
 
+    const label =
+      `${inGroup[0]?.sheetNumber ?? '?'}` +
+      (inGroup.length > 1 ? ` through ${inGroup[inGroup.length - 1]?.sheetNumber ?? '?'}` : '');
+
     await ctx.emit(
       'INFO',
-      `${document.filename} — reading ${inGroup.length} sheet(s): ` +
-        `${inGroup[0]?.sheetNumber ?? '?'}` +
-        (inGroup.length > 1
-          ? ` through ${inGroup[inGroup.length - 1]?.sheetNumber ?? '?'}`
-          : '') +
-        ` (${(group.bytes.length / 1048576).toFixed(1)} MB)`,
+      `${document.filename} — reading ${inGroup.length} sheet(s): ${label} ` +
+        `(${(group.bytes.length / 1048576).toFixed(1)} MB)`,
     );
 
-    // One batch failing must not lose the others.
-    //
-    // A run over a 25-sheet set is thirteen requests and several minutes of
-    // billed work. Throwing on the twelfth because one sheet produced more
-    // scope than the output budget held threw away eleven good batches and
-    // charged for them — which is how a job that half-worked becomes a job
-    // that produced nothing. The failure is reported as a WARNING against the
-    // sheets it lost, so an estimator knows exactly which part of the set was
-    // not read rather than quietly receiving a short answer.
-    let value: z.infer<typeof Draft>;
-    let costUsd: number;
-
     try {
-      ({ value, costUsd } = await extractStructured({
+      const { value, costUsd } = await extractStructured({
         system: DRAWING_SYSTEM,
         schema: Draft,
         pdf: group.bytes,
@@ -442,26 +481,29 @@ async function draftFromDrawing(
         maxTokens: 48000,
         // Reading is the easy part here; writing it all down is the long part.
         thinkingBudget: 6000,
-      }));
+      });
+
+      for (const item of value.items) {
+        drafted.push({ ...item, sourceFileId: document.id, sourceFilename: document.filename });
+      }
+      skipped.push(...value.skipped.map((note) => `${document.filename}: ${note}`));
+      return costUsd;
     } catch (caught) {
-      const sheetList = inGroup.map((sheet) => sheet.sheetNumber ?? `p.${sheet.pageNumber}`).join(', ');
+      // One batch failing must not lose the others. A run over a 25-sheet set is
+      // thirteen requests and several minutes of billed work; throwing on the
+      // twelfth threw away eleven good batches and charged for them.
       await ctx.emit(
         'WARNING',
-        `${document.filename} — could not read ${sheetList}: ` +
+        `${document.filename} — could not read ${label}: ` +
           `${caught instanceof Error ? caught.message : String(caught)}. ` +
           'No scope was drafted from those sheets; the rest of the set was still read.',
-        { sheets: sheetList },
+        { sheets: label },
       );
-      continue;
+      return 0;
     }
+  });
 
-    cost += costUsd;
-
-    for (const item of value.items) {
-      drafted.push({ ...item, sourceFileId: document.id, sourceFilename: document.filename });
-    }
-    skipped.push(...value.skipped.map((note) => `${document.filename}: ${note}`));
-  }
+  cost += costs.reduce((total, value) => total + value, 0);
 
   return cost;
 }

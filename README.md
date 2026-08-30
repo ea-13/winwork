@@ -34,14 +34,18 @@ Each is enforced in code, not documented as an aspiration — see
 
 | File | What it is |
 |---|---|
+| [`docs/06-HANDOFF.md`](docs/06-HANDOFF.md) | **Start here if you are an engineer joining** — rules, architecture, traps, how to verify |
 | [`docs/01-CORE-SPEC.md`](docs/01-CORE-SPEC.md) | Entities, tenancy, gates, agent contracts |
 | [`docs/02-EXECUTION.md`](docs/02-EXECUTION.md) | **The build file** — every step P0–P28, status, and what proves it |
 | [`docs/03-DEMO-SCRIPT.md`](docs/03-DEMO-SCRIPT.md) | **The acceptance criteria** |
 | [`docs/04-EXECUTION-PLAN.md`](docs/04-EXECUTION-PLAN.md) | Week by week, hours, the go/no-go |
 | [`docs/05-TECH-DEBT.md`](docs/05-TECH-DEBT.md) | **The handover register** — everything deferred, and why |
 
-**Start at [`02-EXECUTION.md`](docs/02-EXECUTION.md)** for where the build actually is. It carries
-every step with its status, its verification bar, and any deviation from the original plan.
+**Engineers: start at [`06-HANDOFF.md`](docs/06-HANDOFF.md).** Fifteen minutes there should be
+enough to make a change safely.
+
+**For where the build actually is, see [`02-EXECUTION.md`](docs/02-EXECUTION.md)** — every step with
+its status and verification bar, and a "What is left" backlog at the end.
 
 ## Stack
 
@@ -61,10 +65,12 @@ every step with its status, its verification bar, and any deviation from the ori
 ```bash
 npm install
 cp .env.example .env      # then fill it in — never commit .env
-npm run migrate           # applies supabase/migrations/*.sql
-npm run seed              # demo tenant, one login, 23 division experts
+npm run resume            # cleans, migrates, seeds, typechecks, reports state
 npm run dev               # API on :3001, client on :5173
 ```
+
+`npm run resume` is the one to run first, every time — it clears the two environment
+traps (orphaned workers, a stale tsx cache) that look exactly like application bugs.
 
 Log in with `DEMO_USER_EMAIL` / `DEMO_USER_PASSWORD` from `.env`.
 

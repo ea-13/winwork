@@ -291,3 +291,73 @@ subsRouter.post('/packages/:packageId/consult', requireRole('EST', 'BC'), async 
 
   res.status(202).json({ runId: run.id });
 });
+
+// -----------------------------------------------------------------------------
+// Entering a bid by hand
+// -----------------------------------------------------------------------------
+
+/**
+ * Creates a subcontractor without an import file.
+ *
+ * The import path exists because a GC has a vendor list; this exists because on
+ * any given afternoon they have one more sub than the list does, and making
+ * them go and edit a spreadsheet to add a bidder is how a tool stops getting
+ * used mid-task.
+ */
+subsRouter.post('/subcontractors', requireRole('BC', 'EST', 'ADMIN'), async (req, res) => {
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+
+  if (name === '') {
+    res.status(400).json({ error: 'A name is required' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  // Same name twice is nearly always the same sub typed twice, and two rows for
+  // one bidder splits their history in half.
+  const { data: existing } = await db
+    .from('subcontractor')
+    .select('id, name')
+    .ilike('name', name)
+    .maybeSingle();
+
+  if (existing) {
+    res.status(200).json({ ...existing, existed: true });
+    return;
+  }
+
+  const trades = Array.isArray(body.tradeCsi)
+    ? body.tradeCsi.filter((value): value is string => typeof value === 'string')
+    : typeof body.tradeCsi === 'string' && body.tradeCsi.trim() !== ''
+      ? [body.tradeCsi.trim()]
+      : [];
+
+  const { data, error } = await db
+    .from('subcontractor')
+    .insert({
+      tenant_id: auth.tenantId,
+      name,
+      trade_csi: trades,
+      contact_name: typeof body.contactName === 'string' ? body.contactName.trim() || null : null,
+      contact_email: typeof body.contactEmail === 'string' ? body.contactEmail.trim() || null : null,
+      contact_phone: typeof body.contactPhone === 'string' ? body.contactPhone.trim() || null : null,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+
+  res.status(201).json({ ...data, existed: false });
+});
+

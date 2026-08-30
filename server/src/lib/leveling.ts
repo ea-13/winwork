@@ -42,7 +42,20 @@ type Exclusion = {
   excerpt: string | null;
 };
 
-type Quote = { id: string; quoted_total: number | null; subcontractor_id: string | null };
+type Quote = {
+  id: string;
+  quoted_total: number | null;
+  subcontractor_id: string | null;
+  /**
+   * What this bid is worth TO THIS PACKAGE.
+   *
+   * The same as quoted_total for the overwhelming majority of bids. Different
+   * when a sub priced across divisions and the estimator split them: a $180k
+   * mechanical bid allocated $70k to division 22 must level against the other
+   * plumbing bids at $70k, or the comparison is meaningless.
+   */
+  effective_total: number | null;
+};
 
 const average = (values: number[]): number | null =>
   values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -66,10 +79,51 @@ async function loadPackage(db: SupabaseClient, packageId: string) {
       .from('quote')
       .select('id, quoted_total, subcontractor_id')
       .eq('package_id', packageId)
-      .eq('status', 'EXTRACTED'),
+      // MANUAL levels alongside EXTRACTED. A typed number and a read number
+      // are equally real; only their provenance differs (0015).
+      .in('status', ['EXTRACTED', 'MANUAL']),
   ]);
 
-  const quoteIds = (quotes ?? []).map((quote) => quote.id as string);
+  // Bids allocated INTO this package from elsewhere — a sub who priced across
+  // divisions and was split (0019). They belong in this comparison at their
+  // allocated amount, not their whole total.
+  const { data: allocations } = await db
+    .from('quote_allocation')
+    .select('quote_id, amount')
+    .eq('package_id', packageId);
+
+  const allocatedAmount = new Map(
+    (allocations ?? []).map((row) => [row.quote_id as string, row.amount as number | null]),
+  );
+
+  const foreignIds = (allocations ?? [])
+    .map((row) => row.quote_id as string)
+    .filter((id) => !(quotes ?? []).some((quote) => quote.id === id));
+
+  const { data: foreign } = foreignIds.length
+    ? await db
+        .from('quote')
+        .select('id, quoted_total, subcontractor_id')
+        .in('id', foreignIds)
+        .in('status', ['EXTRACTED', 'MANUAL'])
+    : { data: [] as Record<string, unknown>[] };
+
+  const merged = [...(quotes ?? []), ...(foreign ?? [])] as {
+    id: string;
+    quoted_total: number | null;
+    subcontractor_id: string | null;
+  }[];
+
+  const combined = merged.map((quote) => ({
+    ...quote,
+    // A quote allocated to this package levels at its allocation. One that was
+    // never split levels at its own total, which is every existing bid.
+    effective_total: allocatedAmount.has(quote.id)
+      ? (allocatedAmount.get(quote.id) ?? null)
+      : quote.quoted_total,
+  }));
+
+  const quoteIds = combined.map((quote) => quote.id);
 
   const [{ data: lines }, { data: exclusions }] = await Promise.all([
     quoteIds.length
@@ -88,7 +142,7 @@ async function loadPackage(db: SupabaseClient, packageId: string) {
 
   return {
     scopeItems: (scopeItems ?? []) as ScopeItem[],
-    quotes: (quotes ?? []) as Quote[],
+    quotes: combined as Quote[],
     lines: (lines ?? []) as Line[],
     exclusions: (exclusions ?? []) as Exclusion[],
   };
@@ -327,7 +381,7 @@ export async function computeLeveling(
 
   const { data: existing } = await db
     .from('leveling_result')
-    .select('quote_id, risk_allowance')
+    .select('quote_id, risk_allowance, score_commercial, score_programme')
     .eq('package_id', options.packageId);
 
   const riskByQuote = new Map(
@@ -352,8 +406,19 @@ export async function computeLeveling(
     const addbackTotal = addbackByQuote.get(quote.id) ?? 0;
     const riskAllowance = riskByQuote.get(quote.id) ?? 0;
     const adjustedTotal =
-      quote.quoted_total === null ? null : quote.quoted_total + addbackTotal + riskAllowance;
-    return { quoteId: quote.id, quotedTotal: quote.quoted_total, addbackTotal, riskAllowance, adjustedTotal };
+      // The effective total, not the raw one: a split bid levels here at what
+      // it allocated to THIS package (0019). For every unsplit bid the two are
+      // the same number.
+      quote.effective_total === null
+        ? null
+        : quote.effective_total + addbackTotal + riskAllowance;
+    return {
+      quoteId: quote.id,
+      quotedTotal: quote.effective_total,
+      addbackTotal,
+      riskAllowance,
+      adjustedTotal,
+    };
   });
 
   // A quote with no stated total cannot be ranked. It sorts last and keeps a
@@ -369,21 +434,106 @@ export async function computeLeveling(
     advisoryRank: row.adjustedTotal === null ? 0 : index + 1,
   }));
 
+  // ---- P11 scoring ---------------------------------------------------------
+  //
+  // The weights are the project's, and the two axes a document cannot answer
+  // are carried across from whatever a human last entered rather than being
+  // recomputed as null every time somebody presses Recompute.
+  const { data: pkg } = await db
+    .from('work_package')
+    .select('project_id')
+    .eq('id', options.packageId)
+    .maybeSingle();
+
+  const { data: project } = pkg?.project_id
+    ? await db
+        .from('project')
+        .select('weight_price, weight_scope, weight_risk, weight_commercial, weight_programme')
+        .eq('id', pkg.project_id)
+        .maybeSingle()
+    : { data: null };
+
+  const weights: Weights = {
+    price: Number(project?.weight_price ?? DEFAULT_WEIGHTS.price),
+    scope: Number(project?.weight_scope ?? DEFAULT_WEIGHTS.scope),
+    risk: Number(project?.weight_risk ?? DEFAULT_WEIGHTS.risk),
+    commercial: Number(project?.weight_commercial ?? DEFAULT_WEIGHTS.commercial),
+    programme: Number(project?.weight_programme ?? DEFAULT_WEIGHTS.programme),
+  };
+
+  const humanScores = new Map(
+    (existing ?? []).map((row) => [
+      row.quote_id as string,
+      {
+        commercial: (row.score_commercial as number | null) ?? null,
+        programme: (row.score_programme as number | null) ?? null,
+      },
+    ]),
+  );
+
+  const { scopeItems, lines: allLines, exclusions: allExclusions } = await loadPackage(
+    db,
+    options.packageId,
+  );
+
+  const scored = scoreBids(
+    rows.map((row) => ({
+      quoteId: row.quoteId,
+      adjustedTotal: row.adjustedTotal,
+      pricedItems: new Set(
+        allLines
+          .filter((line) => line.quote_id === row.quoteId && typeof line.line_total === 'number')
+          .map((line) => line.scope_item_id)
+          .filter(Boolean),
+      ).size,
+      excludedItems: new Set(
+        allExclusions
+          .filter((entry) => entry.quote_id === row.quoteId)
+          .map((entry) => entry.scope_item_id)
+          .filter(Boolean),
+      ).size,
+    })),
+    scopeItems.length,
+    weights,
+    humanScores,
+  );
+
+  const scoreByQuote = new Map(scored.map((row) => [row.quoteId, row]));
+
+  // A second, separate order. Kept apart from advisory_rank on purpose: a
+  // weighting an estimator can move must never reorder the adjusted comparison,
+  // which is the claim the product is built on.
+  const weightedOrder = [...scored]
+    .filter((row) => row.weightedScore !== null)
+    .sort((a, b) => (b.weightedScore ?? 0) - (a.weightedScore ?? 0))
+    .map((row) => row.quoteId);
+
   await db.from('leveling_result').delete().eq('package_id', options.packageId);
 
   if (rows.length > 0) {
     const { error } = await db.from('leveling_result').insert(
-      rows.map((row) => ({
-        tenant_id: options.tenantId,
-        package_id: options.packageId,
-        quote_id: row.quoteId,
-        quoted_total: row.quotedTotal,
-        addback_total: row.addbackTotal,
-        risk_allowance: row.riskAllowance,
-        adjusted_total: row.adjustedTotal,
-        advisory_rank: row.advisoryRank,
-        computed_at: new Date().toISOString(),
-      })),
+      rows.map((row) => {
+        const score = scoreByQuote.get(row.quoteId);
+        const weightedRank = weightedOrder.indexOf(row.quoteId);
+        return {
+          tenant_id: options.tenantId,
+          package_id: options.packageId,
+          quote_id: row.quoteId,
+          quoted_total: row.quotedTotal,
+          addback_total: row.addbackTotal,
+          risk_allowance: row.riskAllowance,
+          adjusted_total: row.adjustedTotal,
+          advisory_rank: row.advisoryRank,
+          score_price: score?.scorePrice ?? null,
+          score_scope: score?.scoreScope ?? null,
+          score_risk: score?.scoreRisk ?? null,
+          score_commercial: score?.scoreCommercial ?? null,
+          score_programme: score?.scoreProgramme ?? null,
+          weighted_score: score?.weightedScore ?? null,
+          weighted_rank: weightedRank >= 0 ? weightedRank + 1 : null,
+          computed_at: new Date().toISOString(),
+        };
+      }),
     );
     if (error) throw new Error(`Could not write leveling results: ${error.message}`);
   }
@@ -738,4 +888,127 @@ export async function recordContextOutcomes(
   }
 
   return summary;
+}
+
+// -----------------------------------------------------------------------------
+// P11 · Weighted scoring
+// -----------------------------------------------------------------------------
+
+export type Weights = {
+  price: number;
+  scope: number;
+  risk: number;
+  commercial: number;
+  programme: number;
+};
+
+export const DEFAULT_WEIGHTS: Weights = {
+  price: 30,
+  scope: 25,
+  risk: 20,
+  commercial: 15,
+  programme: 10,
+};
+
+type Scored = {
+  quoteId: string;
+  scorePrice: number | null;
+  scoreScope: number | null;
+  scoreRisk: number | null;
+  scoreCommercial: number | null;
+  scoreProgramme: number | null;
+  weightedScore: number | null;
+};
+
+/**
+ * Scores every bid 0–100 on the five axes, then weights them.
+ *
+ * Three axes are derived, because they are facts about the bid rather than
+ * opinions about the bidder:
+ *
+ *   PRICE      relative to the lowest adjusted total on the package
+ *   SCOPE      how much of the package's scope this bidder actually priced
+ *   RISK       how much of it they explicitly excluded
+ *
+ * Two are left null: COMMERCIAL and PROGRAMME. Nothing in an extracted quote
+ * reliably says whether their terms are acceptable or whether they can hit the
+ * date — those come from a human who has read the quote and spoken to them, and
+ * they are editable on leveling_result for exactly that reason. Inventing them
+ * from what little a PDF says would be a number nobody could defend (R1).
+ *
+ * A null axis is EXCLUDED from the weighting rather than counted as zero, and
+ * the divisor shrinks to match. A bidder nobody has scored on programme is not
+ * a bidder who scored zero on programme, and the difference decides awards.
+ */
+export function scoreBids(
+  rows: {
+    quoteId: string;
+    adjustedTotal: number | null;
+    pricedItems: number;
+    excludedItems: number;
+  }[],
+  scopeItemCount: number,
+  weights: Weights,
+  existing: Map<string, { commercial: number | null; programme: number | null }>,
+): Scored[] {
+  const totals = rows
+    .map((row) => row.adjustedTotal)
+    .filter((value): value is number => value !== null && value > 0);
+
+  const lowest = totals.length > 0 ? Math.min(...totals) : null;
+
+  return rows.map((row) => {
+    // Price: the lowest adjusted bid scores 100, and everything else falls off
+    // in proportion to how much more it costs. A bid 20% above the low scores
+    // 80. Below zero is clamped rather than allowed to go negative, because a
+    // wildly high outlier should score badly, not poison the weighting.
+    const scorePrice =
+      lowest === null || row.adjustedTotal === null || row.adjustedTotal <= 0
+        ? null
+        : Math.max(0, Math.round((lowest / row.adjustedTotal) * 100));
+
+    // Scope: the share of the package's scope items this bidder priced at all.
+    const scoreScope =
+      scopeItemCount === 0 ? null : Math.round((row.pricedItems / scopeItemCount) * 100);
+
+    // Risk: what they named as excluded, inverted. Excluding nothing scores
+    // 100. This is the axis that punishes the apparent low bidder who got there
+    // by carving scope out, which is the whole argument of the product.
+    const scoreRisk =
+      scopeItemCount === 0
+        ? null
+        : Math.max(0, Math.round((1 - row.excludedItems / scopeItemCount) * 100));
+
+    const human = existing.get(row.quoteId);
+    const scoreCommercial = human?.commercial ?? null;
+    const scoreProgramme = human?.programme ?? null;
+
+    const axes: [number | null, number][] = [
+      [scorePrice, weights.price],
+      [scoreScope, weights.scope],
+      [scoreRisk, weights.risk],
+      [scoreCommercial, weights.commercial],
+      [scoreProgramme, weights.programme],
+    ];
+
+    const scored = axes.filter(([value]) => value !== null) as [number, number][];
+    const divisor = scored.reduce((sum, [, weight]) => sum + weight, 0);
+
+    const weightedScore =
+      divisor === 0
+        ? null
+        : Math.round(
+            (scored.reduce((sum, [value, weight]) => sum + value * weight, 0) / divisor) * 10,
+          ) / 10;
+
+    return {
+      quoteId: row.quoteId,
+      scorePrice,
+      scoreScope,
+      scoreRisk,
+      scoreCommercial,
+      scoreProgramme,
+      weightedScore,
+    };
+  });
 }

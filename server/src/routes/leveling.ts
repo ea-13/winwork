@@ -77,16 +77,25 @@ levelingRouter.get('/packages/:packageId/leveling', async (req, res) => {
 
   const db = supabaseForUser(auth.token);
 
-  const [{ data: results }, { data: quotes }, { data: subs }] = await Promise.all([
-    db
-      .from('leveling_result')
-      .select('*')
-      .eq('package_id', packageId)
-      .order('advisory_rank'),
-    db
-      .from('quote')
-      .select('id, subcontractor_id, quoted_total, source_filename, status')
-      .eq('package_id', packageId),
+  const { data: results } = await db
+    .from('leveling_result')
+    .select('*')
+    .eq('package_id', packageId)
+    .order('advisory_rank');
+
+  // Resolve bidders from the RESULT rows rather than from package_id. A bid
+  // split in from another package (0019) is part of this comparison, and
+  // looking it up by package would leave it showing as "Unidentified bidder"
+  // on the very screen it exists to appear on.
+  const resultQuoteIds = [...new Set((results ?? []).map((row) => row.quote_id as string))];
+
+  const [{ data: quotes }, { data: subs }] = await Promise.all([
+    resultQuoteIds.length
+      ? db
+          .from('quote')
+          .select('id, package_id, subcontractor_id, quoted_total, source_filename, status')
+          .in('id', resultQuoteIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     db.from('subcontractor').select('id, name'),
   ]);
 
@@ -102,6 +111,8 @@ levelingRouter.get('/packages/:packageId/leveling', async (req, res) => {
         quote?.source_filename ??
         'Unidentified bidder',
       sourceFilename: quote?.source_filename ?? null,
+      // True when this bid lives on another package and was allocated in.
+      isSplitIn: Boolean(quote) && quote?.package_id !== packageId,
     };
   });
 
@@ -191,8 +202,18 @@ levelingRouter.get('/packages/:packageId/scope-leveling', async (req, res) => {
       db.from('scope_leveling').select('*').eq('package_id', packageId),
       db
         .from('quote')
-        .select('id, subcontractor_id, quoted_total, source_filename, status')
-        .eq('package_id', packageId),
+        .select('id, package_id, subcontractor_id, quoted_total, source_filename, status')
+        .or(
+          `package_id.eq.${packageId},id.in.(${
+            // Bids allocated in from elsewhere belong on this tab too.
+            (await db
+              .from('quote_allocation')
+              .select('quote_id')
+              .eq('package_id', packageId)
+              .then((result) => (result.data ?? []).map((row) => row.quote_id as string))
+            ).join(',') || '00000000-0000-0000-0000-000000000000'
+          })`,
+        ),
       db
         .from('leveling_result')
         .select('quote_id, adjusted_total, quoted_total, advisory_rank')
@@ -538,4 +559,52 @@ levelingRouter.post('/gaps/:gapId/assign', requireRole('EST', 'BC'), async (req,
   }
 
   res.json({ gap: after });
+});
+
+/**
+ * Who was selected on this package, plus the weights the scores were computed
+ * against.
+ *
+ * One request rather than three, because the leveling sheet cannot render
+ * without all of it and three round trips means three chances to draw a
+ * half-populated table.
+ */
+levelingRouter.get('/packages/:packageId/selection', async (req, res) => {
+  const packageId = req.params.packageId ?? '';
+  const auth = req.auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const db = supabaseForUser(auth.token);
+
+  const { data: pkg } = await db
+    .from('work_package')
+    .select('project_id')
+    .eq('id', packageId)
+    .maybeSingle();
+
+  const [{ data: selection }, { data: project }] = await Promise.all([
+    db
+      .from('selection')
+      .select('quote_id, rationale, selected_at')
+      .eq('package_id', packageId)
+      .order('selected_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    pkg?.project_id
+      ? db
+          .from('project')
+          .select('weight_price, weight_scope, weight_risk, weight_commercial, weight_programme')
+          .eq('id', pkg.project_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  res.json({
+    selection: selection ?? null,
+    projectId: pkg?.project_id ?? null,
+    weights: project ?? null,
+  });
 });

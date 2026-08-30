@@ -27,13 +27,16 @@
  *     provenance of a value, not the value
  */
 export const EDITABLE: Record<string, readonly string[]> = {
-  project: ['name', 'owner_org', 'due_at', 'status'],
+  project: ['name', 'owner_org', 'due_at', 'status',
+    // P11 weights. They move the advisory weighted score and never the
+    // adjusted ranking, which is why they are safe to type over.
+    'weight_price', 'weight_scope', 'weight_risk', 'weight_commercial', 'weight_programme'],
 
   work_package: ['name', 'description', 'lead_division', 'csi_divisions',
-    'budget_amount', 'allowance_amount', 'contingency_amount', 'notes'],
+    'budget_amount', 'allowance_amount', 'contingency_amount', 'notes', 'cost_code_id'],
 
   scope_item: ['scope_id', 'csi_division', 'csi_section', 'title', 'description',
-    'unit', 'quantity', 'quantity_basis'],
+    'unit', 'quantity', 'quantity_basis', 'cost_code_id'],
 
   subcontractor: ['name', 'trade_csi', 'contact_name', 'contact_email', 'contact_phone',
     'license_no', 'license_class', 'bonding_capacity', 'emr', 'prequal_status',
@@ -59,6 +62,10 @@ export const EDITABLE: Record<string, readonly string[]> = {
   scope_leveling: ['override_total', 'note'],
 
   document_sheet: ['sheet_number', 'sheet_title', 'discipline'],
+
+  cost_code: ['code', 'description', 'csi_division', 'csi_section', 'sort_order', 'is_active'],
+
+  quote_allocation: ['amount', 'cost_code_id', 'note'],
 
   // is_active and retired_reason move through the retire endpoint, which
   // records why — a line that vanished with no reason teaches nothing.

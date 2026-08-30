@@ -6,6 +6,7 @@ import { BidTab } from '../components/BidTab';
 import { ChainNav, type ChainStep } from '../components/ChainNav';
 import { ErrorBanner, Layout, fileSize } from '../components/Layout';
 import { LevelingMatrix } from '../components/LevelingMatrix';
+import { ManualBid } from '../components/ManualBid';
 import { Solicitation } from '../components/Solicitation';
 import { apiGet, apiPost } from '../lib/api';
 import { type UploadState, uploadBatch } from '../lib/upload';
@@ -210,6 +211,12 @@ export function PackagePage() {
 
       {step === 'bids' && (
         <section className="space-y-3">
+          <ManualBid
+            packageId={packageId}
+            onError={setError}
+            onAdded={() => void refresh()}
+          />
+
           <div
             onDragOver={(event) => {
               event.preventDefault();

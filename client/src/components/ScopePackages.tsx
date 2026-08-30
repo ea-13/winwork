@@ -67,6 +67,8 @@ export function ScopePackages({
   const [assignment, setAssignment] = useState<Record<string, string>>({});
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  /** Division new rows land in. Editable in the row itself afterwards. */
+  const [newDivision, setNewDivision] = useState('09');
   const [templating, setTemplating] = useState(false);
   const [template, setTemplate] = useState<
     { code: string; packageName: string; items: number; titles: string[] }[]
@@ -229,12 +231,32 @@ export function ScopePackages({
     [items, packages, assignment],
   );
 
+  /**
+   * Brings a blank row into existence when somebody types into it.
+   *
+   * It lands unassigned and in the division currently selected for new rows.
+   * Both are then editable in the row itself, which is less presumptuous than
+   * guessing a package from a title that has not been typed yet.
+   */
+  const createScope = useCallback(async (): Promise<string | null> => {
+    try {
+      const created = await apiPost<ScopeItem>(`/projects/${projectId}/scope-items`, {
+        csiDivision: newDivision,
+      });
+      setItems((current) => [...current, created]);
+      return created.id;
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : String(caught));
+      return null;
+    }
+  }, [projectId, newDivision, onError]);
+
   const addScope = useCallback(
     () =>
       guard(async () => {
-        await apiPost(`/projects/${projectId}/scope-items`, { csiDivision: '09' });
+        await apiPost(`/projects/${projectId}/scope-items`, { csiDivision: newDivision });
       }),
-    [projectId],
+    [projectId, newDivision],
   );
 
   const savePackage = async () => {
@@ -446,13 +468,21 @@ export function ScopePackages({
           >
             + Package
           </button>
-          <button
-            onClick={() => void addScope()}
-            disabled={busy}
-            className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
-          >
-            + Scope item
-          </button>
+          <span className="flex items-center gap-1 text-xs text-ink-500">
+            new rows in
+            <select
+              value={newDivision}
+              onChange={(event) => setNewDivision(event.target.value)}
+              className="rounded border border-ink-300 px-1.5 py-1 text-xs"
+              title="Division a blank row lands in. Change it per row afterwards."
+            >
+              {divisions.map((division) => (
+                <option key={division.code} value={division.code}>
+                  {division.code} · {division.title}
+                </option>
+              ))}
+            </select>
+          </span>
         </div>
       </div>
 
@@ -561,9 +591,11 @@ export function ScopePackages({
         rows={rows}
         onCommit={commit}
         onAddRow={addScope}
+        onCreateRow={createScope}
+        blankRows={12}
         groupOf={(row) => assignment[String(row.id)] ?? UNASSIGNED}
         renderGroup={renderGroup}
-        emptyMessage="No scope yet. Draft it from the bid set on the Documents step, or add a row."
+        emptyMessage="No scope yet. Draft it from the bid set on the Documents step, or start typing below."
       />
 
       {noteFor && (
