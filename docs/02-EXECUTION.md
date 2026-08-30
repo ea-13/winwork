@@ -15,7 +15,6 @@ P21–P28 are work that came out of real use and had no number before.
 | 🔸 | Partially done — the gap is named |
 | ▶ | Next |
 | ⬜ | Not started |
-| ⏸ | Parked deliberately |
 
 ---
 
@@ -51,7 +50,7 @@ P21–P28 are work that came out of real use and had no number before.
 | **P19** | Provenance and ledger | ✅ | Gates atomic; provenance endpoint |
 | **P28** | Training corpus export | ✅ | JSONL, labelled ACCEPTED/CORRECTED/PENDING |
 | **P20** | Hardening | 🔸 | Isolation sweep + bundle check; **rate limits open** |
-| **P14** | Change-order archaeology | ⏸ | Parked — needs a closed job's change orders |
+| **P14** | Hindsight (was: CO archaeology) | 🔸 | Unparked and built. API, agent, verdicts, export, screen. **Never run on a real change-order log** — see L16 |
 | **P29–P34** | The walkthrough build | ✅ | Chain nav, uploads, drawings→scope, packages, bid tab, context |
 | **P35–P39** | Restructure and first real run | ✅ | Five steps, Excel grid, scope template, real plan set indexed |
 | **P11** | Leveling matrix | 🔸 | **2026-08-30** — weights, scoring, H6 selection added; it had been marked done without them. Still 🔸: its acceptance bar is the ranking flip, and that needs line-level bids. See **L17** |
@@ -167,7 +166,7 @@ storage rather than trusting the browser.
 Two limits, deliberately distinct: the multipart route stays at 50MB because it buffers in process
 memory; the direct path is bounded only by the bucket, now 5GB.
 
-## P15 · Sub list import 🔸 — parser done, review screen missing
+## P15 · Sub list import ✅
 Handles both shapes real lists come in:
 
 - **Trade directory** — 33 rows, a Scope column, header row not on row 1
@@ -181,8 +180,9 @@ match**. Guessing a trade from a company name would send a package to the wrong 
 vendor master, 0 classified because the file carries no trade column. That number is the finding,
 not a parser failure.
 
-**Remaining:** the review screen — preview, correct the mapping, assign trades in bulk, commit.
-943 vendors need trades and that is a human act.
+The review screen landed with the walkthrough build: preview, correct the mapping, commit. What
+remains is not software — 943 vendors carry no trade because their file had no trade column, and
+assigning those is a human act on real data.
 
 ## P24 · Audited human editing ✅
 Every human-owned field across sixteen tables is editable through one endpoint,
@@ -197,7 +197,7 @@ exactly the back door R4 forbids.
 
 **This is also the training corpus.** See P28.
 
-## P25 · Spreadsheet grid 🔸 — component done, not yet wired
+## P25 · Spreadsheet grid ✅
 Keyboard-first: type to replace, F2 or double-click to edit in place, Enter down, Tab right,
 Shift+arrows to select a range, Ctrl+C/V round-tripping Excel's TSV clipboard, Ctrl+D fill down,
 Ctrl+Z undo, Delete to clear. A pasted block issues one request per row, not per cell.
@@ -206,7 +206,8 @@ Ctrl+Z undo, Delete to clear. A pasted block issues one request per row, not per
 which retires the product's central claim to a GC. The escape hatch is xlsx export and re-import
 with a diff, not a live link.
 
-**Remaining:** attach it to a screen. That is P26.
+Wired to Scope & Packages, the buyout log and the bid tab. Row picking from the number gutter and
+select columns that accept a paste came later — see the 2026-08-31 entries.
 
 ---
 
@@ -365,14 +366,31 @@ Plus the P0 and P1 items in [`05-TECH-DEBT.md`](05-TECH-DEBT.md).
 
 ---
 
-# Parked
+## P14 · Hindsight 🔸 — built, and has never seen real data
+Unparked and built 2026-08-30/31. The API, the matching agent, the human verdicts, the XLSX export
+and a four-step screen all exist and are covered by the QA suite against seeded data.
 
-## P14 · Change-order archaeology ⏸
-Tables exist (`past_project`, `change_order`, `co_classification`); nothing is built. Needs a closed
-job's real change orders to build against, and parked at Elie's direction until then.
+It is 🔸 rather than ✅ for one reason: **no real change-order log has ever been through it.** Until
+one has there is no catch rate, and the catch rate is the entire point. See **L16**.
 
-The output when it lands: *"of $X in change orders, $Y were preventable scope gaps — and here are
-the patterns."*
+### What it is actually for
+
+Clarified 2026-08-30 and worth writing down, because the original framing was
+wrong. It is **not** a change-order tracker. It is a **backtest**:
+
+> Load a finished job's bid set and bids as if it were precon. Run gap detection.
+> Put the real change-order list next to the gaps we flagged.
+
+"Of your 31 change orders, 19 were scope gaps, and we would have flagged 14 of
+them worth $340k before you bought the job" is the shape of the sales argument.
+**Those numbers are invented, and stay invented until L16 closes** — nothing here
+has been run against a real change-order log. It is also the only honest way to
+calibrate `gap_pattern.times_confirmed`, which has never been confirmed against
+reality.
+
+Once buyout is complete this tool is finished. Tracking change orders during
+construction is a different product living somewhere else.
+
 
 ---
 
@@ -530,6 +548,76 @@ pattern that should come out of the knowledge base.
 
 ---
 
+## P45–P48 · Making it AI-native
+
+Seven agents existed before this block. Every one was a button on a screen you
+had to think to visit, which is a tool that HAS AI — it only works for somebody
+already taught it.
+
+**The suggestion engine** (`server/src/lib/suggestions.ts`) reads real state and
+says what is worth doing and why, ordered BLOCKING → HIGH → NORMAL. It is
+deliberately deterministic: not one line asks a model what you should do next,
+because a suggestion engine that is sometimes confidently wrong gets ignored
+within a week and takes the agents behind it down with it. The models do the
+work; rules decide when the work is worth doing. Every suggestion states a
+reason, not an instruction — an argument is something you can disagree with.
+
+**Three new agents:**
+
+| | | |
+|---|---|---|
+| **A10** | Scope coverage auditor | Reads the bid set back against the drafted scope and reports what the documents require that nothing covers. Drafting finds what is there; this finds what is missing. Writes findings, never scope |
+| **A11** | Bid comparability analyst | Reads N bids side by side and writes why they are not comparable. Never states a price, never recommends a bidder — the arithmetic is deterministic and the choice is H6 |
+| **A12** | Cost code mapper | Maps scope onto the tenant's own structure. Only ever returns codes that exist; a proposed code not in the list is dropped, not drafted |
+
+**The bid pane was rebuilt.** It read `Extract → Accept extraction → Normalise →
+Accept mapping`. Every one of those is a real operation and not one is a thing an
+estimator does — "normalise" and "accept mapping" were our internal vocabulary on
+the screen. It is now **Read the bid** → review and correct inline → **Publish to
+project**. The same two model passes, the same H5 gate, the same approval and
+audit rows; what went away was needing to know our words.
+
+### Two API facts worth not rediscovering
+
+- `thinking: { type: 'enabled', budget_tokens: N }` is **rejected** by
+  claude-sonnet-5 with a 400 telling you to use `output_config.effort`. Thinking
+  and output share one budget, so where the hard part is volume rather than
+  judgement, `effort: 'low'` is what leaves room for the answer.
+- The SDK refuses a non-streaming call whose estimated duration passes ten
+  minutes, and the estimate scales with `max_tokens` — so a large output budget
+  is refused before the request is sent. Everything structured goes through
+  `messages.stream()`, whose `finalMessage()` still carries `parsed_output`.
+
+
+## P49 · The project assistant
+
+The Ask panel could reason about a trade and read a document. It could not see
+the project — so "what is still open on this job" was a question the product
+could not answer about itself.
+
+`server/src/lib/chat-tools.ts` gives the assistant tools over the real data:
+project state, scope, context, package detail, bid detail, buyout, suggestions,
+and the leveling arithmetic. Everything runs through the caller's own database
+client, so RLS applies to the assistant exactly as it applies to them — an
+assistant running as `service_role` would be a way to read another tenant by
+asking nicely.
+
+**The rule line is unchanged.** Every tool is either a read, or a run of
+something that produces drafts or deterministic arithmetic. There is no tool
+that writes a scope item, accepts an extraction, disposes of a gap or selects a
+bidder. Those are gate crossings and they belong to a human with a written
+rationale — an assistant that could cross one would make the audit trail a
+record of what a model decided, which is what this product is sold against.
+
+Asked "what is still open on this job", it read three tools and answered with
+real scope ids, the four undecided gaps, the $44k exposure, and the fact that
+none of it is in the carried total yet. That is the product explaining itself.
+
+The tool loop is capped at eight rounds. A model calling tools in a circle is
+the failure that burns an API budget quietly.
+
+---
+
 # Where we stand
 
 **As of 2026-08-31 · roughly 85% of a presentable MVP.**
@@ -639,7 +727,7 @@ read when picking the build back up, and `npm run resume` points at it.
 | **L15** | Drafted **context** is still accepted from a banner, not in the table | Exactly the complaint that produced the in-table scope review. Context lines are read one scope item at a time in a side panel, and there is no way to see all of a run's proposals at once |
 | **L16** | Hindsight needs one real closed job through it end to end | Every piece is built and tested against seeded data. It has never seen a real change-order log, and that is the only thing that calibrates `gap_pattern.times_confirmed` |
 
-### Done 2026-08-31 · third pass
+### Done 2026-08-31
 
 - **The cancel button, which did work.** Reported as broken; it had been writing
   `cancelled_at` correctly the whole time. Two things conspired to hide it:
@@ -682,8 +770,6 @@ read when picking the build back up, and `npm run resume` points at it.
   endpoint, so it was the wrong one to leave lying.
 - **QA 103 → 104.**
 
-### Done 2026-08-31 · second pass
-
 - **Buyout and levelling: one step, two views.** Merging them was right about
   the data and wrong about the screen. They are one dataset answering two
   questions and only one can have the top of the page — *what does this job
@@ -721,7 +807,6 @@ read when picking the build back up, and `npm run resume` points at it.
   `ink-900` was barely legible, and the hint is the half that says what to do next.
 - **QA 100 → 103.**
 
-### Done 2026-08-31
 
 - **The review-and-accept flow, rebuilt.** Drafted scope items are no longer
   announced as a count in a banner. They appear as shaded rows inside the scope
@@ -794,96 +879,4 @@ read when picking the build back up, and `npm run resume` points at it.
 
 `npm run resume` clears both before doing anything else.
 
-## Added 2026-08-30
 
-| | What | Why it matters |
-|---|---|---|
-| **L9** | Leveling and Buyout are still separate steps | Asked for as one surface: buyout as the summary, leveling as the per-sub detail reached by clicking a division header rather than a tab |
-| **L10** | Cost codes exist and import, but nothing is organised by them yet | Scope and packages carry `cost_code_id`; no screen groups or sorts by it, and the Excel import has no UI |
-| **L11** | Quote splitting has no UI | The API is done and tested — one bid across two packages levels correctly at each allocated amount. There is no screen to do it |
-| **L12** | P14 hindsight is schema-only | `change_order` carries `scope_item_id`, `matched_gap_id` and a `hindsight` verdict. No matching logic, no report, no screen. Elie is bringing a closed job's CO list this week |
-
-### What P14 is actually for
-
-Clarified 2026-08-30 and worth writing down, because the original framing was
-wrong. It is **not** a change-order tracker. It is a **backtest**:
-
-> Load a finished job's bid set and bids as if it were precon. Run gap detection.
-> Put the real change-order list next to the gaps we flagged.
-
-"Of your 31 change orders, 19 were scope gaps, and we would have flagged 14 of
-them worth $340k before you bought the job" is the sales argument, and it is also
-the only honest way to calibrate `gap_pattern.times_confirmed` — which has never
-been confirmed against reality.
-
-Once buyout is complete this tool is finished. Tracking change orders during
-construction is a different product living somewhere else.
-
-
-## P45–P48 · Making it AI-native
-
-Seven agents existed before this block. Every one was a button on a screen you
-had to think to visit, which is a tool that HAS AI — it only works for somebody
-already taught it.
-
-**The suggestion engine** (`server/src/lib/suggestions.ts`) reads real state and
-says what is worth doing and why, ordered BLOCKING → HIGH → NORMAL. It is
-deliberately deterministic: not one line asks a model what you should do next,
-because a suggestion engine that is sometimes confidently wrong gets ignored
-within a week and takes the agents behind it down with it. The models do the
-work; rules decide when the work is worth doing. Every suggestion states a
-reason, not an instruction — an argument is something you can disagree with.
-
-**Three new agents:**
-
-| | | |
-|---|---|---|
-| **A10** | Scope coverage auditor | Reads the bid set back against the drafted scope and reports what the documents require that nothing covers. Drafting finds what is there; this finds what is missing. Writes findings, never scope |
-| **A11** | Bid comparability analyst | Reads N bids side by side and writes why they are not comparable. Never states a price, never recommends a bidder — the arithmetic is deterministic and the choice is H6 |
-| **A12** | Cost code mapper | Maps scope onto the tenant's own structure. Only ever returns codes that exist; a proposed code not in the list is dropped, not drafted |
-
-**The bid pane was rebuilt.** It read `Extract → Accept extraction → Normalise →
-Accept mapping`. Every one of those is a real operation and not one is a thing an
-estimator does — "normalise" and "accept mapping" were our internal vocabulary on
-the screen. It is now **Read the bid** → review and correct inline → **Publish to
-project**. The same two model passes, the same H5 gate, the same approval and
-audit rows; what went away was needing to know our words.
-
-### Two API facts worth not rediscovering
-
-- `thinking: { type: 'enabled', budget_tokens: N }` is **rejected** by
-  claude-sonnet-5 with a 400 telling you to use `output_config.effort`. Thinking
-  and output share one budget, so where the hard part is volume rather than
-  judgement, `effort: 'low'` is what leaves room for the answer.
-- The SDK refuses a non-streaming call whose estimated duration passes ten
-  minutes, and the estimate scales with `max_tokens` — so a large output budget
-  is refused before the request is sent. Everything structured goes through
-  `messages.stream()`, whose `finalMessage()` still carries `parsed_output`.
-
-
-## P49 · The project assistant
-
-The Ask panel could reason about a trade and read a document. It could not see
-the project — so "what is still open on this job" was a question the product
-could not answer about itself.
-
-`server/src/lib/chat-tools.ts` gives the assistant tools over the real data:
-project state, scope, context, package detail, bid detail, buyout, suggestions,
-and the leveling arithmetic. Everything runs through the caller's own database
-client, so RLS applies to the assistant exactly as it applies to them — an
-assistant running as `service_role` would be a way to read another tenant by
-asking nicely.
-
-**The rule line is unchanged.** Every tool is either a read, or a run of
-something that produces drafts or deterministic arithmetic. There is no tool
-that writes a scope item, accepts an extraction, disposes of a gap or selects a
-bidder. Those are gate crossings and they belong to a human with a written
-rationale — an assistant that could cross one would make the audit trail a
-record of what a model decided, which is what this product is sold against.
-
-Asked "what is still open on this job", it read three tools and answered with
-real scope ids, the four undecided gaps, the $44k exposure, and the fact that
-none of it is in the carried total yet. That is the product explaining itself.
-
-The tool loop is capped at eight rounds. A model calling tools in a circle is
-the failure that burns an API budget quietly.
